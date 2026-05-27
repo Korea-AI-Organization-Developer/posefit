@@ -1,0 +1,428 @@
+// =============================================================================
+// PoseFit ERD (v2.0 — 쿼리 우선 설계)
+// 근거: docs/requirements.md, docs/posefit_wireframes_v1.1.html
+// DBML: https://dbml.dbdiagram.io/docs
+// 목표: 6개월 뒤에 후회하지 않을 단순한 스키마.
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// (1) 핵심 read/write 쿼리
+// -----------------------------------------------------------------------------
+// === READ (화면 진입 시 발생) ============================================
+// Q-R1  SCR-02 대시보드 KPI: "최근 점수" — 유저의 최신 completed 세션 1건
+// Q-R2  SCR-02 대시보드 KPI: "이번 주 운동 횟수" — 유저 × 주 단위 count
+// Q-R3  SCR-02 대시보드 KPI: "누적 운동 횟수" — 유저 전체 lifetime count
+// Q-R4  SCR-02 "최근 운동 기록" — 유저 최근 N(=5)건 세션 + 운동명 + 점수
+// Q-R5  SCR-02 "30일 활동 캘린더" — 일자별 운동 여부/강도 (30 row)
+// Q-R6  SCR-03 "운동 선택" — is_active=true 운동 목록 + 사용자별 평균 점수
+// Q-R7  SCR-04 "정답 영상" — 단일 exercise 메타데이터 + reference_video_url
+// Q-R8  SCR-05 START — 사용자 얼굴 임베딩 1건 (인식 매칭용)
+// Q-R9  SCR-05 START — 운동의 정답 키포인트 시퀀스 (DTW 비교용, 100~1000 frame)
+// Q-R10 SCR-06 결과 — 단일 세션의 score/rep_count + 피드백 목록(3~5건)
+// Q-R11 SCR-07 히스토리 통계 — 주/월 단위 (횟수, 평균 점수, 총 시간, 최고 운동)
+// Q-R12 SCR-07 점수 추이 차트 — 7/30일 일자×종목별 평균 점수 (종목 필터 가능)
+// Q-R13 SCR-07 저장 영상 목록 — saved=true 세션, ended_at DESC, 무한 스크롤
+// Q-R14 SCR-08 설정 — 프로필 + 연결된 소셜 계정 목록
+// Q-R15 SCR-08 "저장된 영상 N개·M MB" — 합계 통계
+//
+// === WRITE ============================================================
+// Q-W1  AUTH 가입 — users + social_accounts + face_embeddings insert (트랜잭션)
+// Q-W2  EX-START — workout_sessions insert (status=in_progress)
+// Q-W3  EX 운동 중 — keypoint_frames bulk insert
+//        ⚠️ 15+ FPS × 평균 3분 세션 = 세션당 ~2,700 row.
+//        DAU 100명 × 2 세션/일 = 540K row/day = ~16M/month.
+//        → 정책: saved=false 세션의 frames는 STOP 직후 즉시 삭제(§5.2 영상 폐기와 동일 원칙).
+//                saved=true 세션만 영구 보관 → 월 수만 row 수준으로 축소.
+//        → MySQL RANGE PARTITION BY YEAR(created_at)*100+MONTH(created_at).
+// Q-W4  EX-STOP — workout_sessions update (ended_at, score, status=completed)
+//                 + feedbacks bulk insert (3~5건)
+//                 + workout_daily_stats UPSERT (incremental)
+// Q-W5  EX-12 저장 — workout_sessions update (saved=true, video_url)
+// Q-W6  설정 — 얼굴 재등록: face_embeddings replace (1행 update)
+// Q-W7  설정 — 영상 일괄 삭제: workout_sessions.video_url NULL + saved=false
+// Q-W8  설정 — 회원 탈퇴: users.status='withdrawn' + withdrawn_at 기록
+//                 (실제 hard delete는 grace period 후 배치)
+//
+// -----------------------------------------------------------------------------
+// (2) 빈도 / 지연 예산 / 결과 row 수
+// -----------------------------------------------------------------------------
+//  ID    빈도         지연예산   row수          비고
+//  ---- ------------ --------- -------------- -------------------------------
+//  R1   high (진입)   <200ms    1              users.id + ended_at idx
+//  R2   high         <200ms     1 (count)      sessions(user, started_at) idx
+//  R3   high         <200ms     1 (count)      동상
+//  R4   high         <200ms     5              sessions(user, started_at DESC)
+//  R5   high         <200ms     ~30            daily_stats(user, date) idx
+//  R6   mid          <300ms     3~10           exercises + 사용자별 평균 join
+//  R7   mid (선택시)  <300ms    1              PK lookup
+//  R8   mid (START)  <100ms     1              face_embeddings PK lookup
+//  R9   mid (START)  <500ms     100~1000       ref_keypoints(ex_id, idx) idx
+//  R10  mid (결과)   <300ms     1+5            sessions PK + feedbacks(session)
+//  R11  mid          <500ms     5~7 stat 값    daily_stats GROUP BY 또는 캐시
+//  R12  mid          <500ms     7~30           daily_stats(user, ex, date)
+//  R13  mid          <300ms     20/page        sessions(user, saved, ended_at)
+//  R14  mid          <200ms     1+2            users + social_accounts(user)
+//  R15  low          <500ms     1 (sum)        sessions(user, saved=true)
+//  ---- ------------ --------- -------------- -------------------------------
+//  W1   low (가입)   <500ms     —              트랜잭션
+//  W2   세션당 1     <100ms     —              단일 insert
+//  W3   ★ 15~30/s    <50ms      —              핫패스. bulk insert + 단일 idx.
+//  W4   세션당 1     <500ms     —              세션 종료 후 동기 처리 OK
+//  W5   사용자선택   <300ms     —              storage 업로드는 별도(presigned url)
+//  W6   드물게       <300ms     —
+//  W7   드물게       <2s        —              storage 비동기 cleanup
+//  W8   극히 드물게   <1s        —              hard delete는 배치
+//
+// -----------------------------------------------------------------------------
+// (3) 전역 설계 결정 (Why ↓)
+// -----------------------------------------------------------------------------
+//  D-1 PK 전략: 모든 테이블 BIGINT auto_increment.
+//      ─ 외부 노출이 URL 일부로 노출되더라도 1차 출시 규모/단일 백엔드라 충분.
+//      ─ UUID는 인덱스 사이즈/MySQL 클러스터드 인덱스 효율↓ → 보류.
+//      ─ exercises는 slug(varchar) 별도 → URL용.
+//  D-2 시간 컬럼: 모두 DATETIME(6) UTC 저장.
+//      ─ MySQL TIMESTAMP는 2038 + 자동 TZ 변환 위험. DATETIME으로 통일.
+//      ─ application 단에서 UTC 직렬화, 표시 시점에만 KST 변환.
+//  D-3 created_at / updated_at:
+//      ─ mutable 테이블만 updated_at 부여.
+//      ─ append-only(keypoint_frames, feedbacks)는 created_at만.
+//  D-4 soft delete vs hard delete:
+//      ─ users만 soft (status='withdrawn' + withdrawn_at) → grace period 후
+//         배치로 hard delete. 그 시점에 모든 자식 테이블이 CASCADE.
+//      ─ 그 외 테이블에는 deleted_at 컬럼 두지 않음 (불필요한 nullable 회피).
+//  D-5 JSON 컬럼 사용 기준:
+//      ─ keypoints, bbox, summary_json — OK (검색 불필요·표시/계산 입력으로만).
+//      ─ status·period_type·generated_by 등 도메인 enum은 varchar+CHECK.
+//  D-6 keypoint_frames 보존 정책 (★ 핵심 결정):
+//      ─ saved=false 세션의 frames: STOP 직후 트리거로 즉시 삭제.
+//      ─ saved=true 세션의 frames: 영구 보관 (재계산/리뷰용).
+//      ─ 월 단위 RANGE 파티셔닝 (운영성·아카이브 편의).
+//      ─ 이유: §5.2 "저장하지 않은 영상은 즉시 폐기"의 데이터 측면 일관성.
+//  D-7 세션 status 전이:
+//      ─ in_progress → completed   (정상 STOP + 점수 산출)
+//      ─ in_progress → failed      (얼굴 미인식·다수 인물 등 분석 중단)
+//      ─ in_progress → aborted     (사용자가 STOP 안 누르고 이탈, 배치 정리)
+//      ─ completed/failed/aborted 는 종착 상태. 다시 in_progress 로 되돌아가지 않음.
+//  D-8 FK 동작:
+//      ─ users 삭제 → social_accounts/face_embeddings/workout_sessions/
+//                     workout_daily_stats: CASCADE
+//      ─ exercises 삭제 → workout_sessions: RESTRICT
+//         (이력 보존 위해 삭제 대신 is_active=false 사용)
+//      ─ exercises → exercise_reference_keypoints: CASCADE
+//      ─ workout_sessions → keypoint_frames/feedbacks: CASCADE
+//  D-9 PII 마킹:
+//      ─ users.email, social_accounts.provider_uid: PII. DB at-rest 암호화 의존.
+//      ─ face_embeddings.embedding: PII. application-level 암호화 권장.
+//      ─ workout_sessions.video_url: PII (영상 → object storage 접근 통제).
+//  D-10 요구사항 §6 대비 변경 사항:
+//      ─ Report → workout_daily_stats 로 대체.
+//         이유: 일/주/월/누적 + 종목 필터(REP-07) 를 모두 지원하려면 가장
+//         세분화된 (user, exercise, date) 단위 집계가 단순·유연. 주/월은 합쳐서 산출.
+//      ─ face_embedding을 users 컬럼 → 별도 테이블로 분리.
+//         이유: SCR-08 "얼굴 데이터만 삭제" 단독 액션을 깔끔히 처리.
+//      ─ social_accounts 신설. 한 유저가 Google/Kakao 양쪽 연동 가능 (와이어프레임 SCR-08).
+
+Project posefit {
+  database_type: 'MySQL'
+  Note: 'PoseFit ERD v2.0. 근거: docs/requirements.md, docs/posefit_wireframes_v1.1.html'
+}
+
+// =============================================================================
+// 1. 인증 / 사용자
+// =============================================================================
+
+Table users {
+  id            bigint        [pk, increment]
+  email         varchar(255)  [null, unique, note: 'PII. 소셜 전용 — 카카오 이메일 미제공 케이스 대비 NULL 허용. MySQL unique는 다중 NULL 허용. 식별자가 아닌 표시·CS용 메타데이터.']
+  nickname      varchar(50)   [not null]
+  role          varchar(20)   [not null, default: 'user', note: 'user | admin (Phase 2). CHECK 제약']
+  status        varchar(20)   [not null, default: 'active', note: 'active | withdrawn. CHECK 제약']
+  withdrawn_at  datetime(6)   [null, note: '탈퇴 신청 시각. grace period 후 배치로 hard delete']
+  created_at    datetime(6)   [not null, default: `CURRENT_TIMESTAMP(6)`]
+  updated_at    datetime(6)   [not null, default: `CURRENT_TIMESTAMP(6)`]
+
+  Indexes {
+    email   [unique, name: 'uq_users_email']
+    status  [name: 'idx_users_status']
+  }
+
+  Note: '''
+    인증 본체. 소셜 로그인 전용 — password 컬럼 없음.
+
+    도메인 invariant (application 단에서 강제):
+      - users row 가 존재하려면 social_accounts 가 ≥ 1건 있어야 함.
+      - 가입은 (users + social_accounts + face_embeddings) 단일 트랜잭션.
+      - 마지막 연동 해제는 거부 — 최소 1개 소셜 유지 (SCR-08 안내).
+      - 실제 인증 식별자는 social_accounts.(provider, provider_uid).
+        users.email 은 표시·CS용 메타데이터로 NULL 가능.
+
+    탈퇴는 soft (status=withdrawn + withdrawn_at) → grace period 경과 시
+    배치로 hard delete, 자식 테이블은 CASCADE.
+  '''
+}
+
+Table social_accounts {
+  id              bigint        [pk, increment]
+  user_id         bigint        [not null]
+  provider        varchar(20)   [not null, note: 'google | kakao. CHECK 제약']
+  provider_uid    varchar(255)  [not null, note: 'PII. 소셜 측 사용자 식별자']
+  provider_email  varchar(255)  [null,     note: 'PII. 소셜 측에서 받아온 이메일. 카카오 미제공 케이스로 NULL 허용. 로그인마다 최신값으로 덮어쓰기.']
+  created_at      datetime(6)   [not null, default: `CURRENT_TIMESTAMP(6)`]
+  updated_at      datetime(6)   [not null, default: `CURRENT_TIMESTAMP(6)`, note: 'provider_email 동기화 시각']
+
+  Indexes {
+    (provider, provider_uid) [unique, name: 'uq_social_provider_uid']
+    user_id                  [name: 'idx_social_user']
+  }
+
+  Note: '''
+    한 user가 Google/Kakao 양쪽 연동 가능(SCR-08). 분리해서 row 단위 add/remove.
+    provider_email 은 SCR-08 "Google 계정 — gmail.com" 표시용. 로그인마다 최신값 덮어쓰기.
+  '''
+}
+
+Ref: social_accounts.user_id > users.id [delete: cascade]
+
+Table face_embeddings {
+  user_id        bigint        [pk, note: '1:1 — 활성 임베딩은 1개만. 재등록 시 UPDATE.']
+  embedding      varbinary(2048) [not null, note: 'PII. 벡터(float32[]) 직렬화 + application-level 암호화.']
+  model_version  varchar(50)   [not null, note: '추출 모델 버전. 모델 교체 시 재등록 트리거에 사용.']
+  registered_at  datetime(6)   [not null, default: `CURRENT_TIMESTAMP(6)`]
+
+  Note: '''
+    얼굴 캡처 결과(AUTH-03). users와 1:1 이지만 별도 테이블로 분리한 이유:
+    SCR-08 "얼굴 데이터 삭제" 액션을 user 행 건드리지 않고 단독 처리하기 위해.
+  '''
+}
+
+Ref: face_embeddings.user_id > users.id [delete: cascade]
+
+// =============================================================================
+// 2. 운동 종목 / 정답 데이터
+// =============================================================================
+
+Table exercises {
+  id                   bigint        [pk, increment]
+  slug                 varchar(50)   [not null, unique, note: 'URL용 식별자 (예: squat, lunge, push-up)']
+  name                 varchar(100)  [not null, note: '표시명 (한글)']
+  name_en              varchar(100)  [null, note: '영문명. 와이어프레임 SCR-03 카드의 부제목']
+  description          text          [null]
+  thumbnail_url        varchar(500)  [null]
+  reference_video_url  varchar(500)  [not null, note: '정답 모범 영상 (object storage URL)']
+  difficulty           varchar(20)   [not null, default: 'beginner', note: 'beginner | intermediate | advanced. CHECK 제약']
+  body_part            varchar(20)   [not null, note: '하체|상체|코어|전신. SCR-03 필터용. CHECK 제약']
+  metric_type          varchar(20)   [not null, note: 'reps(횟수기반: 스쿼트/푸쉬업) | duration(시간기반: 플랭크). 점수 산정 분기에 사용.']
+  is_active            boolean       [not null, default: true, note: '신규 세션 시작 가능 여부. 비활성도 과거 세션 표시는 가능.']
+  created_at           datetime(6)   [not null, default: `CURRENT_TIMESTAMP(6)`]
+  updated_at           datetime(6)   [not null, default: `CURRENT_TIMESTAMP(6)`]
+
+  Indexes {
+    slug      [unique, name: 'uq_exercises_slug']
+    is_active [name: 'idx_exercises_active']
+  }
+
+  Note: '운동 종목 마스터. §5.5 확장성 — 정답영상+메타데이터 등록만으로 종목 추가.'
+}
+
+Table exercise_reference_keypoints {
+  id           bigint     [pk, increment]
+  exercise_id  bigint     [not null]
+  frame_index  int        [not null, note: '정답 영상 내 프레임 순서 (0부터)']
+  keypoints    json       [not null, note: '17개 관절 정규화 좌표. JSON 사용: 가변·검색 불필요·표시 입력으로만.']
+  bbox         json       [null,     note: '[x, y, w, h]. 정답 영상 기준.']
+
+  Indexes {
+    (exercise_id, frame_index) [unique, name: 'uq_ref_kp_exercise_frame']
+  }
+
+  Note: '''
+    정답 영상의 키포인트 시퀀스(EX-07).
+    별도 테이블 — 정답 영상 갱신 시 이 테이블만 truncate & insert로 교체.
+    Q-R9: (exercise_id, frame_index) 인덱스로 시퀀스 스캔.
+  '''
+}
+
+Ref: exercise_reference_keypoints.exercise_id > exercises.id [delete: cascade]
+
+// =============================================================================
+// 3. 운동 세션 (1회 운동 = 1 row)
+// =============================================================================
+
+Table workout_sessions {
+  id            bigint        [pk, increment]
+  user_id       bigint        [not null]
+  exercise_id   bigint        [not null]
+
+  status        varchar(20)   [not null, default: 'in_progress', note: 'in_progress | completed | failed | aborted. CHECK 제약. 전이는 D-7 참고']
+
+  started_at    datetime(6)   [not null, note: 'START 시각']
+  ended_at      datetime(6)   [null,     note: 'STOP 시각. in_progress 일 때 NULL']
+  duration_sec  int           [null,     note: '캐시(반정규화): ended_at - started_at. 주간 "총 운동 시간" 합산을 매번 TIMESTAMPDIFF 없이.']
+
+  score         decimal(5,2)  [null,     note: '0~100. completed 일 때만 채워짐. keypoint_frames 집계 결과 캐시(반정규화)']
+  rep_count     int           [null,     note: 'metric_type=reps 일 때 동작 횟수']
+  hold_sec      int           [null,     note: 'metric_type=duration 일 때 자세 유지 시간(초)']
+
+  saved         boolean       [not null, default: false, note: 'EX-12. true 일 때만 video_url + keypoint_frames 보존']
+  video_url     varchar(500)  [null,     note: 'PII. saved=true 시에만 채움. object storage URL.']
+
+  created_at    datetime(6)   [not null, default: `CURRENT_TIMESTAMP(6)`]
+  updated_at    datetime(6)   [not null, default: `CURRENT_TIMESTAMP(6)`]
+
+  Indexes {
+    // Q-R1/R4: 대시보드 최근 기록 — user 최신순 스캔
+    (user_id, started_at)              [name: 'idx_sessions_user_started']
+    // Q-R12: 종목별 점수 추이 — daily_stats가 1차이나 보조용으로도 사용
+    (user_id, exercise_id, started_at) [name: 'idx_sessions_user_ex_started']
+    // Q-R13: 저장 영상 목록 — saved=true 만 무한 스크롤
+    (user_id, saved, ended_at)         [name: 'idx_sessions_user_saved_ended']
+    // 진행 중 세션 빠른 조회 (사용자가 새 세션 시작 시 기존 in_progress 정리)
+    (user_id, status)                  [name: 'idx_sessions_user_status']
+    exercise_id                        [name: 'idx_sessions_exercise']
+  }
+
+  Note: '''
+    핵심 사실 테이블. score/duration_sec/rep_count 는 반정규화 캐시.
+    근거: 대시보드/리포트 진입마다 keypoint_frames GROUP BY 는 지연 예산 초과.
+          세션 종료 시 1회 산출되므로 write cost 미미, read 100:1 이상.
+  '''
+}
+
+Ref: workout_sessions.user_id     > users.id     [delete: cascade]
+Ref: workout_sessions.exercise_id > exercises.id [delete: restrict]
+
+Table keypoint_frames {
+  id            bigint        [pk, increment]
+  session_id    bigint        [not null]
+  frame_index   int           [not null, note: '세션 내 프레임 순서 (0부터)']
+  timestamp_ms  int           [not null, note: 'started_at 기준 경과 ms']
+  keypoints     json          [not null, note: '17개 관절 정규화 좌표']
+  bbox          json          [not null, note: '[x, y, w, h]']
+  frame_error   decimal(6,4)  [null,     note: '정답 대비 프레임 오차. 점수 산출 시 사전 계산해두는 캐시.']
+  created_at    datetime(6)   [not null, default: `CURRENT_TIMESTAMP(6)`]
+
+  Indexes {
+    (session_id, frame_index) [unique, name: 'uq_frames_session_idx']
+  }
+
+  Note: '''
+    EX-05/06. 프레임별 키포인트 로그. ★ 고볼륨 테이블.
+    보존 정책 (D-6):
+      - saved=false 세션의 frames: STOP 직후 즉시 DELETE (영상 폐기 §5.2 와 동등).
+      - saved=true  세션의 frames: 영구 보관.
+    운영 권장: created_at 기준 RANGE PARTITION (월 단위).
+              월별 파티션 DROP 으로 아카이브/정리 간편화.
+    Append-only — updated_at 없음.
+  '''
+}
+
+Ref: keypoint_frames.session_id > workout_sessions.id [delete: cascade]
+
+// =============================================================================
+// 4. 피드백
+// =============================================================================
+
+Table feedbacks {
+  id            bigint        [pk, increment]
+  session_id    bigint        [not null]
+  order_index   int           [not null, default: 0, note: '표시 순서. SCR-06 피드백 리스트 정렬 안정성 보장']
+  category      varchar(20)   [not null, note: 'posture | count | timing | overall. CHECK 제약']
+  severity      varchar(20)   [not null, default: 'info', note: 'info | warning | critical. UI 강조용. CHECK 제약']
+  generated_by  varchar(10)   [not null, note: 'rule | llm. CHECK 제약']
+  llm_model     varchar(100)  [null,     note: 'generated_by=llm 일 때 모델/버전 명']
+  content       text          [not null, note: '자연어 피드백 본문 (예: "무릎이 발끝보다 앞으로 나왔습니다")']
+  created_at    datetime(6)   [not null, default: `CURRENT_TIMESTAMP(6)`]
+
+  Indexes {
+    (session_id, order_index) [name: 'idx_feedbacks_session_order']
+  }
+
+  Note: 'EX-10. 세션당 보통 3~5건. Append-only. 세션과 라이프사이클 동일 → CASCADE.'
+}
+
+Ref: feedbacks.session_id > workout_sessions.id [delete: cascade]
+
+// =============================================================================
+// 5. 사전 집계 (일·주·월·누적 리포트 모두 여기서 산출)
+// =============================================================================
+
+Table workout_daily_stats {
+  id              bigint        [pk, increment]
+  user_id         bigint        [not null]
+  exercise_id     bigint        [not null]
+  stat_date       date          [not null, note: 'KST 기준 일자. 표시 일관성 위해 application에서 일자 변환 후 저장.']
+
+  sessions_count  int           [not null, default: 0]
+  total_duration_sec int        [not null, default: 0]
+  avg_score       decimal(5,2)  [null,     note: 'completed 세션 평균. completed가 0이면 NULL.']
+  best_score      decimal(5,2)  [null]
+  total_reps      int           [null,     note: 'metric_type=reps 합계']
+  total_hold_sec  int           [null,     note: 'metric_type=duration 합계']
+
+  updated_at      datetime(6)   [not null, default: `CURRENT_TIMESTAMP(6)`]
+
+  Indexes {
+    (user_id, stat_date, exercise_id) [unique, name: 'uq_daily_user_date_ex']
+    (user_id, stat_date)              [name: 'idx_daily_user_date']
+    (user_id, exercise_id, stat_date) [name: 'idx_daily_user_ex_date']
+  }
+
+  Note: '''
+    요구사항 §6 의 "Report" 엔티티 대체 (D-10).
+    가장 세분화된 (user, exercise, date) 단위 집계 → 주/월/누적은 합쳐서 산출.
+      - Q-R5  30일 캘린더:        SELECT stat_date, SUM(sessions_count) WHERE user_id=? AND stat_date >= ?
+      - Q-R6  운동별 사용자 평균:  WHERE user_id=? GROUP BY exercise_id
+      - Q-R11 주/월 통계:          WHERE user_id=? AND stat_date BETWEEN ? AND ?
+      - Q-R12 점수 추이 차트:      WHERE user_id=? AND exercise_id IN (?) AND stat_date BETWEEN ? AND ?
+      - REP-07 종목 필터:          WHERE exercise_id = ?
+    갱신: 세션 STOP 시 incremental UPSERT (트랜잭션 내).
+          야간 배치로 재계산해서 drift 보정.
+  '''
+}
+
+Ref: workout_daily_stats.user_id     > users.id     [delete: cascade]
+Ref: workout_daily_stats.exercise_id > exercises.id [delete: restrict]
+
+// =============================================================================
+// 관계 요약
+// =============================================================================
+//   users (1) ─┬─ (1) face_embeddings           [얼굴 데이터 단독 삭제 가능]
+//              ├─ (N) social_accounts
+//              ├─ (N) workout_sessions ─┬─ (N) keypoint_frames   [saved=true 만 보관]
+//              │                        └─ (N) feedbacks
+//              └─ (N) workout_daily_stats
+//
+//   exercises (1) ─┬─ (N) exercise_reference_keypoints
+//                  ├─ (N) workout_sessions          [RESTRICT — 이력 보존]
+//                  └─ (N) workout_daily_stats
+
+// =============================================================================
+// (4) 안티패턴 자가점검
+// =============================================================================
+// [x] EAV 없음
+//     — 모든 속성은 컬럼으로 정의. 가변 구조는 keypoints/bbox/summary 같은 명확한
+//       JSON 영역에만 한정.
+// [x] 동일 데이터 이중 저장의 동기화 책임 명확
+//     — workout_sessions.{score, duration_sec, rep_count, hold_sec}: 세션 STOP 트랜잭션에서 산출.
+//     — workout_daily_stats: 세션 STOP 트랜잭션에서 incremental UPSERT.
+//     — 둘 다 야간 배치로 재계산해 drift 보정 (회복 가능).
+// [x] nullable 남발 없음
+//     — ended_at/score 등은 "in_progress 동안 NULL"이 도메인 의미.
+//     — video_url 은 "saved=true 일 때만 채움"이 명시적 의미.
+//     — 그 외 NULL 없음.
+// [x] enum 정수화 없음
+//     — status, role, provider, difficulty, body_part, metric_type, severity,
+//       generated_by, category 모두 varchar + CHECK.
+// [x] 폴리모픽 FK 없음
+//     — feedbacks는 session_id 만. 타 엔티티에 붙일 일 생기면 별도 테이블 신설 예정.
+// [x] 인덱스 없는 FK 없음
+//     — 모든 FK 컬럼은 단독 또는 복합 인덱스의 좌측에 포함.
+//
+// =============================================================================
+// (5) 아직 미정 / 다음 단계로 미루는 항목
+// =============================================================================
+// - face_embeddings.embedding 의 application-level 암호화 키 관리 (KMS?) → 인프라 결정 후
+// - keypoint_frames 의 정확한 RANGE 파티션 DDL → 운영 단계에서 작성
+// - workout_sessions.video_url 의 object storage 키 컨벤션 → API 설계 단계
+// - admin 화면 (Phase 2) — exercises CRUD, 사용자 관리 → 별도 admin role 권한만 미리 마련해둠
+// - 점수 산정 알고리즘 확정(T-03) 후 frame_error 의 정확한 의미 정의

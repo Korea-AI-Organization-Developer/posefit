@@ -1,0 +1,2153 @@
+# =============================================================================
+# PoseFit API Specification (v0.1.0)
+# 근거: docs/requirements.md, docs/posefit_wireframes_v1.1.html, docs/erd.dbml
+#
+# 작성 순서 (프롬프트 §0):
+#   (1) 화면(SCR) × 액션 → endpoint 매트릭스
+#   (2) ERD 키 쿼리(Q-R*/Q-W*) → endpoint 매핑
+#   (3) 실시간 파이프라인(START~STOP) 데이터 흐름
+#   (4) components.schemas → paths
+#
+# 모든 effective URL 은 server URL(.../v1) 기준. 본 문서 paths 는 /v1 prefix 생략.
+# =============================================================================
+#
+# -----------------------------------------------------------------------------
+# (1) SCR × 액션 → endpoint
+# -----------------------------------------------------------------------------
+# SCR-01 로그인/회원가입
+#   "Google/Kakao 로그인" 클릭         → POST /auth/social/{provider}/callback
+#   (신규 사용자) 얼굴 캡처 단계       → POST /users/me/face
+#
+# SCR-02 메인 대시보드
+#   진입 — KPI 카드 3종                → GET  /users/me/dashboard
+#   진입 — 최근 운동 기록 5건          → GET  /workout-sessions?limit=5
+#   진입 — 30일 활동 캘린더            → GET  /reports/calendar?days=30
+#   "운동 시작하기" 클릭                → (라우팅: SCR-03)
+#   기록 행 클릭                       → (라우팅: SCR-06, GET /workout-sessions/{id})
+#
+# SCR-03 운동 선택
+#   진입 — 활성 운동 카드 + 내 평균    → GET  /exercises?activeOnly=true
+#   카드 클릭                          → (라우팅: SCR-04)
+#
+# SCR-04 정답 영상
+#   진입 — 운동 메타데이터              → GET  /exercises/{slug}
+#   (선택) 정답 키포인트 prefetch       → GET  /exercises/{slug}/reference-keypoints
+#   "운동 시작" 클릭                    → (라우팅: SCR-05)
+#
+# SCR-05 운동 실행 (실시간 파이프라인 — 아래 (3) 참고)
+#   START 클릭                         → POST /workout-sessions
+#                                      → POST /workout-sessions/{id}:start
+#   (서버 추론 시) 프레임 업로드        → POST /workout-sessions/{id}/frames
+#   STOP 클릭                          → POST /workout-sessions/{id}:stop
+#
+# SCR-06 운동 결과
+#   진입                               → GET  /workout-sessions/{id}
+#                                      → GET  /workout-sessions/{id}/feedbacks
+#   "영상 저장" 클릭                    → POST /workout-sessions/{id}/video:presign
+#                                      → (클라이언트가 presigned URL 로 PUT)
+#                                      → POST /workout-sessions/{id}:save
+#   "종료" 클릭 (저장 X)                → DELETE /workout-sessions/{id}
+#
+# SCR-07 보고/히스토리
+#   진입 — 통계 카드                   → GET  /reports/summary?period=week
+#   진입 — 점수 추이 차트              → GET  /reports/score-trend?days=7
+#   진입 — 저장 영상 목록              → GET  /workout-sessions?savedOnly=true
+#   탭 전환 (일/주/월/누적)             → GET  /reports/summary?period=...
+#   종목 필터                          → 위 모든 endpoint 에 exerciseSlug 쿼리 추가
+#
+# SCR-08 설정
+#   진입 — 프로필                      → GET    /users/me
+#   진입 — 연결된 소셜 계정             → GET    /users/me/social-accounts
+#   진입 — 저장 영상 N개/M MB 표시      → GET    /users/me/videos:summary
+#   닉네임 수정                        → PATCH  /users/me
+#   얼굴 재등록                        → PUT    /users/me/face
+#   얼굴 데이터만 삭제                  → DELETE /users/me/face
+#   소셜 추가 연동                     → POST   /users/me/social-accounts/{provider}:link
+#   소셜 연동 해제                     → DELETE /users/me/social-accounts/{provider}
+#   저장 영상 일괄 삭제                 → POST   /users/me/videos:purge
+#   로그아웃                           → POST   /auth/logout
+#   회원 탈퇴                          → DELETE /users/me
+#
+# -----------------------------------------------------------------------------
+# (2) ERD 쿼리 → endpoint 매핑
+# -----------------------------------------------------------------------------
+#  Q-R1  최근 점수                        → GET /users/me/dashboard.recentScore
+#  Q-R2  이번 주 운동 횟수                  → GET /users/me/dashboard.weeklySessionsCount
+#  Q-R3  누적 운동 횟수                    → GET /users/me/dashboard.lifetimeSessionsCount
+#  Q-R4  최근 N건                          → GET /workout-sessions?limit=5
+#  Q-R5  30일 캘린더                       → GET /reports/calendar?days=30
+#  Q-R6  운동 목록 + 사용자 평균            → GET /exercises?activeOnly=true (items[].userAvgScore)
+#  Q-R7  운동 메타데이터                   → GET /exercises/{slug}
+#  Q-R8  사용자 얼굴 임베딩 조회            → (서버 내부, :start 처리에서 사용)
+#  Q-R9  정답 키포인트 시퀀스              → GET /exercises/{slug}/reference-keypoints
+#  Q-R10 단일 세션 + 피드백                → GET /workout-sessions/{id}
+#                                            + GET /workout-sessions/{id}/feedbacks
+#  Q-R11 주/월/누적 통계                   → GET /reports/summary?period=week|month|cumulative
+#  Q-R12 점수 추이 차트                    → GET /reports/score-trend
+#  Q-R13 저장 영상 목록                    → GET /workout-sessions?savedOnly=true
+#  Q-R14 프로필 + 소셜                     → GET /users/me + GET /users/me/social-accounts
+#  Q-R15 저장 영상 합계                    → GET /users/me/videos:summary
+#  ------------------------------------------------------------------
+#  Q-W1  가입 (users+social+face)         → POST /auth/social/{provider}/callback (users+social 트랜잭션)
+#                                          + POST /users/me/face                (face 트랜잭션)
+#  Q-W2  세션 생성                         → POST /workout-sessions
+#  Q-W3  프레임 bulk insert (15+ FPS)      → POST /workout-sessions/{id}/frames
+#  Q-W4  STOP 점수 산출 + 피드백 + daily_stats UPSERT → POST /workout-sessions/{id}:stop (서버 내부)
+#  Q-W5  영상 저장 확정                    → POST /workout-sessions/{id}/video:presign
+#                                          + POST /workout-sessions/{id}:save
+#  Q-W6  얼굴 재등록                       → PUT  /users/me/face
+#  Q-W7  영상 일괄 삭제                    → POST /users/me/videos:purge
+#  Q-W8  회원 탈퇴                         → DELETE /users/me
+#
+# -----------------------------------------------------------------------------
+# (3) 실시간 파이프라인 (START ~ STOP)
+# -----------------------------------------------------------------------------
+# 요구사항 §7.1 — 프레임 처리 위치(클라/서버) 미정. 두 시나리오 모두 지원.
+#
+#   [Client]                                            [Server]
+#   ──────────────────────────────────────────────────────────────────────
+#   SCR-04 "운동 시작" 클릭
+#
+#   POST /workout-sessions               ─────────►  workout_sessions insert
+#     body: { exerciseSlug }                          (status=in_progress)
+#                                        ◄─────  201 { id, status }
+#
+#   POST /workout-sessions/{id}:start    ─────────►  face_embeddings 조회 + 매칭
+#     body: { faceFrame (jpeg, base64) }              tracker 초기화
+#                                        ◄─────  200 { matched: true }
+#                                          또는 422 FACE_NOT_DETECTED
+#                                                  / MULTIPLE_FACES_DETECTED
+#                                                  / FACE_MISMATCH
+#                                          (이 경우 세션은 status=failed)
+#
+#   ── 시나리오 A: 서버 추론 ─────────────────────────────────────────────
+#   loop (15+ FPS, 0.5~2초 배치):
+#     POST /workout-sessions/{id}/frames ──────────►  keypoint_frames bulk insert
+#       body: { frames: [{frameIndex, timestampMs,    (이때 saved=false 가정;
+#                         keypoints, bbox}] }          최종 :save 결과에 따라 보존/폐기)
+#                                        ◄─────  202 { accepted, frameErrors? }
+#
+#   ── 시나리오 B: 클라이언트 추론 (MediaPipe 등) ────────────────────────
+#   (클라이언트가 로컬에서 추론, 메모리에 frames 누적, 서버 호출 없음)
+#
+#   STOP 클릭
+#   POST /workout-sessions/{id}:stop     ─────────►  점수 산출 + 피드백 생성
+#     body: {                                         workout_sessions UPDATE
+#       frames?: [...]  // 시나리오 B 일괄 동봉       workout_daily_stats UPSERT
+#     }
+#                                        ◄─────  200 { session, feedbacks }
+#
+#   ── SCR-06 결과 화면 ─────────────────────────────────────────────────
+#   "영상 저장" 선택 시:
+#     POST /workout-sessions/{id}/video:presign  ──►  presigned URL 발급
+#                                        ◄─────  200 { uploadUrl, objectKey,
+#                                                       expiresAt }
+#     PUT <uploadUrl> (binary)                ──►  object storage 직접 업로드
+#     POST /workout-sessions/{id}:save     ─────►  saved=true 확정
+#       body: { objectKey }                          keypoint_frames 영구 보관
+#                                        ◄─────  200 { session }
+#
+#   "종료" 선택 시 (저장 X):
+#     DELETE /workout-sessions/{id}        ─────►  keypoint_frames 즉시 삭제
+#                                                   (saved=false 라이프사이클)
+#                                        ◄─────  204
+#
+# WebSocket 채택 시 — 본 spec 본문에는 REST 만 유지하고,
+# 파일 끝 부록의 x-websocket 섹션에 메시지 스펙을 별도 정의.
+#
+# =============================================================================
+
+openapi: 3.1.0
+
+info:
+  title: PoseFit API
+  version: 0.1.0
+  description: |
+    AI 기반 운동 자세 분석 및 피드백 서비스의 REST API.
+    상세 설계 컨텍스트는 본 파일 상단 주석 (1)(2)(3) 참고.
+    인증은 소셜 전용(Google/Kakao). 비밀번호 endpoint 없음.
+  contact:
+    name: PoseFit Team
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.dev.posefit.app/v1
+    description: Development
+  - url: https://api.posefit.app/v1
+    description: Production (placeholder)
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+    description: 소셜 로그인 콜백·토큰 갱신·로그아웃 (SCR-01, SCR-08).
+  - name: Users
+    description: 본인 프로필·얼굴·소셜·영상 관리 (SCR-02 일부, SCR-08).
+  - name: Exercises
+    description: 운동 종목 카탈로그 및 정답 데이터 (SCR-03, SCR-04).
+  - name: Sessions
+    description: 운동 세션 라이프사이클 (SCR-05, SCR-06).
+  - name: Frames
+    description: 실시간 키포인트 프레임 업로드 (SCR-05, 서버 추론 시나리오).
+  - name: Feedbacks
+    description: 세션 피드백 조회 (SCR-06).
+  - name: Reports
+    description: 일/주/월/누적 통계·차트·캘린더 (SCR-02 일부, SCR-07).
+
+paths:
+
+  # ===========================================================================
+  # Auth — SCR-01, SCR-08(로그아웃)
+  # ===========================================================================
+  /auth/social/{provider}/callback:
+    post:
+      tags: [Auth]
+      operationId: socialLoginCallback
+      security: []
+      summary: 소셜 로그인 콜백 — 가입 또는 로그인
+      description: |
+        프론트엔드가 OAuth provider 로부터 받은 authorization code 를 전달.
+        서버가 provider 와 토큰 교환 후 사용자를 생성하거나 식별하여 JWT 발급.
+        신규 사용자면 `isNewUser=true` — 클라이언트는 이어서 `/users/me/face` 호출 필요.
+      parameters:
+        - $ref: '#/components/parameters/SocialProvider'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthSocialCallbackRequest'
+            example:
+              code: "4/0AeaYSHB3..."
+              redirectUri: "https://posefit.app/auth/callback"
+      responses:
+        '200':
+          description: 로그인 또는 가입 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSocialCallbackResponse'
+              example:
+                accessToken: "eyJhbGciOi..."
+                refreshToken: "eyJhbGciOi..."
+                accessTokenExpiresIn: 900
+                isNewUser: true
+                user:
+                  id: 1024
+                  email: "honggildong@gmail.com"
+                  nickname: "홍길동"
+                  role: "user"
+                  status: "active"
+                  registrationStep: "face_required"
+                  createdAt: "2026-05-26T09:12:33Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshAccessToken
+      security: []
+      summary: Access token 재발급
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRefreshRequest'
+            example: { refreshToken: "eyJhbGciOi..." }
+      responses:
+        '200':
+          description: 재발급 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthRefreshResponse'
+              example:
+                accessToken: "eyJhbGciOi..."
+                accessTokenExpiresIn: 900
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: 로그아웃 — 현재 refresh token 무효화
+      responses:
+        '204': { description: 무효화 완료 }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  # ===========================================================================
+  # Users — SCR-02 일부, SCR-08
+  # ===========================================================================
+  /users/me:
+    get:
+      tags: [Users]
+      operationId: getMe
+      summary: 본인 프로필 조회 (SCR-08 진입)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+              example:
+                id: 1024
+                email: "honggildong@gmail.com"
+                nickname: "홍길동"
+                role: "user"
+                status: "active"
+                registrationStep: "complete"
+                createdAt: "2026-02-14T03:21:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    patch:
+      tags: [Users]
+      operationId: updateMe
+      summary: 프로필 수정 (현재는 nickname 만)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdateRequest'
+            example: { nickname: "홍길동2" }
+      responses:
+        '200':
+          description: 수정 완료
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+              example:
+                id: 1024
+                email: "honggildong@gmail.com"
+                nickname: "홍길동2"
+                role: "user"
+                status: "active"
+                registrationStep: "complete"
+                createdAt: "2026-02-14T03:21:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [Users]
+      operationId: withdrawMe
+      summary: 회원 탈퇴 (soft) — status=withdrawn 후 grace period 경과 시 hard delete
+      responses:
+        '204': { description: 탈퇴 처리 완료 (영구 삭제는 배치) }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /users/me/dashboard:
+    get:
+      tags: [Users]
+      operationId: getDashboard
+      summary: 대시보드 KPI + 최근 N건 (Q-R1~R3 + Q-R4 요약)
+      description: |
+        SCR-02 진입 시 단일 호출. 페이지네이션이 필요하면 `GET /workout-sessions` 별도 호출.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardResponse'
+              example:
+                recentScore: 87
+                weeklySessionsCount: 4
+                lifetimeSessionsCount: 23
+                recentSessions:
+                  - id: 50211
+                    exercise: { slug: "squat", name: "스쿼트" }
+                    status: "completed"
+                    startedAt: "2026-05-25T09:28:00Z"
+                    endedAt: "2026-05-25T09:30:14Z"
+                    durationSec: 134
+                    score: 92
+                    repCount: 8
+                    saved: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /users/me/face:
+    post:
+      tags: [Users]
+      operationId: registerFace
+      summary: 얼굴 임베딩 등록 (가입 직후 1회)
+      description: |
+        AUTH-03. 신규 가입 흐름의 마지막 단계.
+        이미 등록되어 있으면 409 FACE_ALREADY_REGISTERED (재등록은 PUT 사용).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FaceRegistrationForm'
+      responses:
+        '201':
+          description: 등록 완료
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FaceRegistrationResponse'
+              example:
+                registeredAt: "2026-05-26T09:13:10Z"
+                modelVersion: "facevec-2026.04"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    put:
+      tags: [Users]
+      operationId: replaceFace
+      summary: 얼굴 재등록 (SCR-08)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FaceRegistrationForm'
+      responses:
+        '200':
+          description: 재등록 완료
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FaceRegistrationResponse'
+              example:
+                registeredAt: "2026-05-26T09:30:00Z"
+                modelVersion: "facevec-2026.04"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      tags: [Users]
+      operationId: deleteFace
+      summary: 얼굴 데이터만 삭제 (SCR-08) — 계정은 유지
+      description: 삭제 후 운동 endpoint 호출 시 422 FACE_REQUIRED.
+      responses:
+        '204': { description: 삭제 완료 }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /users/me/social-accounts:
+    get:
+      tags: [Users]
+      operationId: listMySocialAccounts
+      summary: 연결된 소셜 계정 목록 (SCR-08)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SocialAccount'
+              example:
+                - provider: "google"
+                  providerEmail: "honggildong@gmail.com"
+                  linkedAt: "2026-02-14T03:21:00Z"
+                - provider: "kakao"
+                  providerEmail: null
+                  linkedAt: "2026-04-01T11:08:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /users/me/social-accounts/{provider}:link:
+    post:
+      tags: [Users]
+      operationId: linkSocialAccount
+      summary: 소셜 계정 추가 연동 (SCR-08)
+      parameters:
+        - $ref: '#/components/parameters/SocialProvider'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthSocialCallbackRequest'
+            example:
+              code: "AAAA..."
+              redirectUri: "https://posefit.app/settings/social/callback"
+      responses:
+        '201':
+          description: 연동 추가 완료
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialAccount'
+              example:
+                provider: "kakao"
+                providerEmail: "honggildong@kakao.com"
+                linkedAt: "2026-05-26T09:40:12Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /users/me/social-accounts/{provider}:
+    delete:
+      tags: [Users]
+      operationId: unlinkSocialAccount
+      summary: 소셜 계정 연동 해제 (SCR-08)
+      description: |
+        도메인 invariant — 마지막 1개 연동 해제는 거부 (409 LAST_SOCIAL_ACCOUNT).
+        탈퇴를 원하면 `DELETE /users/me`.
+      parameters:
+        - $ref: '#/components/parameters/SocialProvider'
+      responses:
+        '204': { description: 해제 완료 }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /users/me/videos:summary:
+    get:
+      tags: [Users]
+      operationId: getMyVideosSummary
+      summary: 저장 영상 합계 (SCR-08의 "총 12개 영상 · 약 248MB" 라인)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideosSummaryResponse'
+              example: { count: 12, totalBytes: 260046848 }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /users/me/videos:purge:
+    post:
+      tags: [Users]
+      operationId: purgeMyVideos
+      summary: 저장 영상 일괄 삭제 (SCR-08)
+      description: |
+        모든 saved=true 세션의 video_url 을 NULL 로, saved=false 로 전환.
+        keypoint_frames 도 보존 정책에 따라 함께 삭제. 스토리지 객체는 비동기 cleanup.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: 삭제 작업 접수 (비동기)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurgeAcceptedResponse'
+              example: { purgedSessionsCount: 12, freedBytes: 260046848 }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  # ===========================================================================
+  # Exercises — SCR-03, SCR-04
+  # ===========================================================================
+  /exercises:
+    get:
+      tags: [Exercises]
+      operationId: listExercises
+      summary: 운동 종목 목록 (Q-R6) — SCR-03
+      description: |
+        `userAvgScore` 는 호출자 본인의 평균(workout_daily_stats 집계).
+      parameters:
+        - name: activeOnly
+          in: query
+          required: false
+          schema: { type: boolean, default: true }
+          description: false 면 비활성 종목도 포함 (admin 화면 대비).
+          example: true
+        - name: bodyPart
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [lower, upper, core, full]
+          description: SCR-03 "부위" 필터.
+          example: lower
+        - $ref: '#/components/parameters/PageCursor'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExerciseListResponse'
+              example:
+                items:
+                  - slug: "squat"
+                    name: "스쿼트"
+                    nameEn: "Squat"
+                    difficulty: "beginner"
+                    bodyPart: "lower"
+                    metricType: "reps"
+                    thumbnailUrl: "https://cdn.posefit.app/ex/squat.jpg"
+                    userAvgScore: 84
+                  - slug: "lunge"
+                    name: "런지"
+                    nameEn: "Lunge"
+                    difficulty: "intermediate"
+                    bodyPart: "lower"
+                    metricType: "reps"
+                    thumbnailUrl: "https://cdn.posefit.app/ex/lunge.jpg"
+                    userAvgScore: 89
+                nextCursor: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /exercises/{slug}:
+    get:
+      tags: [Exercises]
+      operationId: getExercise
+      summary: 운동 종목 상세 (Q-R7) — SCR-04
+      parameters:
+        - $ref: '#/components/parameters/ExerciseSlug'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exercise'
+              example:
+                slug: "squat"
+                name: "스쿼트"
+                nameEn: "Squat"
+                description: "기본 하체 운동. 무릎과 발끝의 방향을 일치시키고 ..."
+                difficulty: "beginner"
+                bodyPart: "lower"
+                metricType: "reps"
+                thumbnailUrl: "https://cdn.posefit.app/ex/squat.jpg"
+                referenceVideoUrl: "https://cdn.posefit.app/ex/squat.mp4"
+                isActive: true
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /exercises/{slug}/reference-keypoints:
+    get:
+      tags: [Exercises]
+      operationId: getExerciseReferenceKeypoints
+      summary: 정답 키포인트 시퀀스 (Q-R9) — DTW 비교용
+      description: |
+        SCR-05 START 직전 클라이언트 prefetch 또는 클라이언트 추론 시나리오 비교용.
+        서버 추론 시나리오에서는 호출 없이 서버가 직접 사용.
+      parameters:
+        - $ref: '#/components/parameters/ExerciseSlug'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceKeypointSequence'
+              example:
+                exerciseSlug: "squat"
+                frameCount: 240
+                frames:
+                  - frameIndex: 0
+                    keypoints: [[0.51, 0.12], [0.52, 0.18]]
+                    bbox: [0.32, 0.05, 0.36, 0.92]
+                  - frameIndex: 1
+                    keypoints: [[0.51, 0.12], [0.52, 0.18]]
+                    bbox: [0.32, 0.05, 0.36, 0.92]
+        '404':
+          $ref: '#/components/responses/NotFound'
+  # ===========================================================================
+  # Sessions — SCR-05, SCR-06, SCR-07(목록)
+  # ===========================================================================
+  /workout-sessions:
+    get:
+      tags: [Sessions]
+      operationId: listWorkoutSessions
+      summary: 운동 세션 목록 (Q-R4, Q-R13)
+      description: |
+        - SCR-02 대시보드 "최근 운동 기록" — limit=5
+        - SCR-07 저장 영상 목록 — savedOnly=true
+        정렬은 항상 endedAt DESC (in_progress 는 startedAt DESC). 임의 정렬 비허용.
+      parameters:
+        - name: savedOnly
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          example: false
+        - name: exerciseSlug
+          in: query
+          required: false
+          schema: { type: string }
+          description: 종목 필터 (REP-07).
+          example: squat
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: 시작일(KST, inclusive). 미래 날짜는 422.
+          example: "2026-05-01"
+        - name: to
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: 종료일(KST, inclusive).
+          example: "2026-05-31"
+        - $ref: '#/components/parameters/PageCursor'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkoutSessionListResponse'
+              example:
+                items:
+                  - id: 50211
+                    exercise: { slug: "squat", name: "스쿼트" }
+                    status: "completed"
+                    startedAt: "2026-05-25T09:28:00Z"
+                    endedAt: "2026-05-25T09:30:14Z"
+                    durationSec: 134
+                    score: 92
+                    repCount: 8
+                    saved: true
+                nextCursor: "eyJpZCI6NTAyMDh9"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    post:
+      tags: [Sessions]
+      operationId: createWorkoutSession
+      summary: 운동 세션 생성 (Q-W2) — START 클릭 직후
+      description: |
+        status=in_progress 로 row 생성. 이후 `:start` 호출로 얼굴 매칭·트래킹 시작.
+        진행 중 세션이 이미 있으면 409 SESSION_ALREADY_ACTIVE.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkoutSessionCreateRequest'
+            example: { exerciseSlug: "squat" }
+      responses:
+        '201':
+          description: 생성됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkoutSession'
+              example:
+                id: 50220
+                exercise: { slug: "squat", name: "스쿼트" }
+                status: "in_progress"
+                startedAt: "2026-05-26T09:45:00Z"
+                endedAt: null
+                durationSec: null
+                score: null
+                repCount: null
+                holdSec: null
+                saved: false
+                videoUrl: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+  /workout-sessions/{id}:
+    get:
+      tags: [Sessions]
+      operationId: getWorkoutSession
+      summary: 세션 단건 조회 (Q-R10) — SCR-06 진입
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkoutSession'
+              example:
+                id: 50211
+                exercise: { slug: "squat", name: "스쿼트" }
+                status: "completed"
+                startedAt: "2026-05-25T09:28:00Z"
+                endedAt: "2026-05-25T09:30:14Z"
+                durationSec: 134
+                score: 92
+                repCount: 8
+                holdSec: null
+                saved: true
+                videoUrl: "https://media.posefit.app/sessions/50211.mp4"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Sessions]
+      operationId: deleteWorkoutSession
+      summary: 세션 폐기 (SCR-06 "종료" — 저장 안 함)
+      description: |
+        saved=false 세션을 명시적으로 폐기. keypoint_frames · 임시 영상도 모두 삭제.
+        이미 saved=true 인 세션 삭제는 먼저 videos:purge 후 가능.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '204': { description: 폐기 완료 }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /workout-sessions/{id}:start:
+    post:
+      tags: [Sessions]
+      operationId: startWorkoutSession
+      summary: 얼굴 매칭 + 트래킹 시작 (EX-03)
+      description: |
+        업로드된 얼굴 프레임을 등록 임베딩과 매칭. 실패 시 세션을 status=failed 로 전환.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartSessionRequest'
+            example:
+              faceFrameJpegBase64: "/9j/4AAQSkZJRgABAQAAAQABAAD..."
+      responses:
+        '200':
+          description: 매칭 성공 — 트래킹 진입
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartSessionResponse'
+              example:
+                matched: true
+                trackingStartedAt: "2026-05-26T09:45:03Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          description: |
+            얼굴 인식 실패 — code 로 분기.
+            FACE_NOT_DETECTED / MULTIPLE_FACES_DETECTED / FACE_MISMATCH / FACE_REQUIRED.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: "https://posefit.app/errors/face-not-detected"
+                title: "Face not detected"
+                status: 422
+                code: "FACE_NOT_DETECTED"
+                detail: "프레임에서 얼굴을 찾을 수 없습니다. 조명을 확인하고 정면을 바라봐 주세요."
+                traceId: "01HF8..."
+
+  /workout-sessions/{id}:stop:
+    post:
+      tags: [Sessions]
+      operationId: stopWorkoutSession
+      summary: STOP — 점수 산출 + 피드백 생성 (Q-W4)
+      description: |
+        시나리오 B(클라이언트 추론) 이면 body 에 누적 frames 일괄 동봉.
+        시나리오 A 면 body.frames 생략 (서버가 이미 받은 frames 로 산출).
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StopSessionRequest'
+            example:
+              frames: []
+      responses:
+        '200':
+          description: 완료 — 점수와 피드백 반환
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StopSessionResponse'
+              example:
+                session:
+                  id: 50220
+                  exercise: { slug: "squat", name: "스쿼트" }
+                  status: "completed"
+                  startedAt: "2026-05-26T09:45:00Z"
+                  endedAt: "2026-05-26T09:47:14Z"
+                  durationSec: 134
+                  score: 87
+                  repCount: 8
+                  holdSec: null
+                  saved: false
+                  videoUrl: null
+                feedbacks:
+                  - id: 9001
+                    orderIndex: 0
+                    category: "overall"
+                    severity: "info"
+                    generatedBy: "rule"
+                    content: "스쿼트 8회 중 6회는 자세가 매우 안정적이었습니다."
+                    createdAt: "2026-05-26T09:47:14Z"
+                  - id: 9002
+                    orderIndex: 1
+                    category: "posture"
+                    severity: "warning"
+                    generatedBy: "llm"
+                    llmModel: "claude-opus-4-7"
+                    content: "3회차에서 무릎이 발끝보다 앞으로 나왔습니다. 무게중심을 뒤꿈치 쪽으로 두세요."
+                    createdAt: "2026-05-26T09:47:14Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /workout-sessions/{id}:save:
+    post:
+      tags: [Sessions]
+      operationId: saveWorkoutSession
+      summary: 영상 저장 확정 (EX-12) — saved=true 전환
+      description: |
+        선행 단계: `/workout-sessions/{id}/video:presign` 으로 받은 objectKey 를
+        클라이언트가 직접 PUT 업로드한 뒤 본 endpoint 호출.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveSessionRequest'
+            example: { objectKey: "sessions/50220/video.mp4" }
+      responses:
+        '200':
+          description: 저장 확정
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkoutSession'
+              example:
+                id: 50220
+                exercise: { slug: "squat", name: "스쿼트" }
+                status: "completed"
+                startedAt: "2026-05-26T09:45:00Z"
+                endedAt: "2026-05-26T09:47:14Z"
+                durationSec: 134
+                score: 87
+                repCount: 8
+                holdSec: null
+                saved: true
+                videoUrl: "https://media.posefit.app/sessions/50220/video.mp4"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+  /workout-sessions/{id}/video:presign:
+    post:
+      tags: [Sessions]
+      operationId: presignVideoUpload
+      summary: 영상 업로드용 presigned URL 발급
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VideoPresignRequest'
+            example: { contentType: "video/mp4", sizeBytes: 8400000 }
+      responses:
+        '200':
+          description: 발급 완료
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoPresignResponse'
+              example:
+                uploadUrl: "https://media.posefit.app.s3.amazonaws.com/sessions/50220/video.mp4?X-Amz-Signature=..."
+                objectKey: "sessions/50220/video.mp4"
+                method: "PUT"
+                headers:
+                  Content-Type: "video/mp4"
+                expiresAt: "2026-05-26T09:50:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+  # ===========================================================================
+  # Frames — SCR-05 (서버 추론 시나리오)
+  # ===========================================================================
+  /workout-sessions/{id}/frames:
+    post:
+      tags: [Frames]
+      operationId: uploadFrames
+      summary: 키포인트 프레임 배치 업로드 (Q-W3, 서버 추론)
+      description: |
+        한 번에 1~2초 분량의 프레임을 묶어 보낸다 (chunked 권장).
+        세션 status=in_progress 가 아니면 409.
+        세션이 saved=false 로 종료될 경우 STOP 직후 frames 는 폐기됨(D-6).
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FrameBatchRequest'
+            example:
+              frames:
+                - frameIndex: 120
+                  timestampMs: 8000
+                  keypoints: [[0.52, 0.14], [0.51, 0.20]]
+                  bbox: [0.30, 0.04, 0.40, 0.94]
+                - frameIndex: 121
+                  timestampMs: 8067
+                  keypoints: [[0.52, 0.14], [0.51, 0.20]]
+                  bbox: [0.30, 0.04, 0.40, 0.94]
+      responses:
+        '202':
+          description: 수신 완료 (분석은 STOP 시점에 확정)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrameBatchResponse'
+              example:
+                accepted: 2
+                rejected: 0
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+  # ===========================================================================
+  # Feedbacks — SCR-06
+  # ===========================================================================
+  /workout-sessions/{id}/feedbacks:
+    get:
+      tags: [Feedbacks]
+      operationId: listSessionFeedbacks
+      summary: 세션 피드백 목록 (Q-R10 일부) — orderIndex ASC
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Feedback'
+              example:
+                - id: 9001
+                  orderIndex: 0
+                  category: "overall"
+                  severity: "info"
+                  generatedBy: "rule"
+                  content: "스쿼트 8회 중 6회는 자세가 매우 안정적이었습니다."
+                  createdAt: "2026-05-26T09:47:14Z"
+                - id: 9002
+                  orderIndex: 1
+                  category: "posture"
+                  severity: "warning"
+                  generatedBy: "llm"
+                  llmModel: "claude-opus-4-7"
+                  content: "3회차에서 무릎이 발끝보다 앞으로 나왔습니다."
+                  createdAt: "2026-05-26T09:47:14Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  # ===========================================================================
+  # Reports — SCR-02(캘린더), SCR-07
+  # ===========================================================================
+  /reports/calendar:
+    get:
+      tags: [Reports]
+      operationId: getActivityCalendar
+      summary: 활동 캘린더 (Q-R5) — SCR-02 30일 그리드 + SCR-07 재사용
+      parameters:
+        - name: days
+          in: query
+          required: true
+          schema: { type: integer, minimum: 7, maximum: 90 }
+          description: 오늘부터 거슬러 N일 (KST).
+          example: 30
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarResponse'
+              example:
+                days:
+                  - date: "2026-04-27"
+                    sessionsCount: 0
+                    avgScore: null
+                  - date: "2026-04-28"
+                    sessionsCount: 1
+                    avgScore: 81
+                  - date: "2026-04-29"
+                    sessionsCount: 2
+                    avgScore: 88
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+  /reports/summary:
+    get:
+      tags: [Reports]
+      operationId: getReportSummary
+      summary: 기간 요약 (Q-R11) — SCR-07 통계 카드
+      parameters:
+        - name: period
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [day, week, month, cumulative]
+          description: |
+            - day: 단일 일자
+            - week: 단일 주(월~일)
+            - month: 단일 월
+            - cumulative: 가입 이후 전체
+          example: week
+        - name: referenceDate
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: 기준 일자(KST). period=cumulative 면 무시.
+          example: "2026-05-26"
+        - name: exerciseSlug
+          in: query
+          required: false
+          schema: { type: string }
+          description: 종목 필터 (REP-07).
+          example: squat
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportSummary'
+              example:
+                period: "week"
+                periodStart: "2026-05-25"
+                periodEnd: "2026-05-31"
+                sessionsCount: 4
+                totalDurationSec: 2520
+                avgScore: 86
+                bestExercise:
+                  slug: "squat"
+                  name: "스쿼트"
+                  bestScore: 92
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+  /reports/score-trend:
+    get:
+      tags: [Reports]
+      operationId: getScoreTrend
+      summary: 점수 추이 (Q-R12) — SCR-07 차트
+      parameters:
+        - name: days
+          in: query
+          required: true
+          schema: { type: integer, enum: [7, 30, 90] }
+          example: 7
+        - name: exerciseSlug
+          in: query
+          required: false
+          schema: { type: string }
+          description: 미지정 시 종목별 시리즈가 모두 포함됨.
+          example: squat
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScoreTrendResponse'
+              example:
+                series:
+                  - exerciseSlug: "squat"
+                    exerciseName: "스쿼트"
+                    points:
+                      - date: "2026-05-20"
+                        avgScore: 81
+                      - date: "2026-05-22"
+                        avgScore: 88
+                      - date: "2026-05-25"
+                        avgScore: 92
+                  - exerciseSlug: "lunge"
+                    exerciseName: "런지"
+                    points:
+                      - date: "2026-05-21"
+                        avgScore: 78
+                      - date: "2026-05-24"
+                        avgScore: 85
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+components:
+
+  # ===========================================================================
+  # Security
+  # ===========================================================================
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Authorization: Bearer <accessToken>.
+        access 15분, refresh 14일 (refresh는 별도 endpoint).
+
+  # ===========================================================================
+  # Reusable parameters
+  # ===========================================================================
+  parameters:
+    PageCursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: ["string", "null"]
+      description: 직전 응답의 nextCursor. 첫 페이지는 생략.
+      example: "eyJpZCI6NTAyMDh9"
+
+    PageLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      example: 20
+
+    SessionId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+      example: 50220
+
+    ExerciseSlug:
+      name: slug
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-z0-9-]+$"
+      example: squat
+
+    SocialProvider:
+      name: provider
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [google, kakao]
+      example: google
+
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+        maxLength: 128
+      description: |
+        24시간 내 동일 키로 재요청 시 같은 응답 반환.
+        부작용 있는 POST 전반에 권장.
+      example: "f0e1d2c3-b4a5-6789-0abc-def012345678"
+
+  # ===========================================================================
+  # Reusable responses (모든 4xx/5xx 는 $ref — 중복 정의 금지)
+  # ===========================================================================
+  responses:
+    BadRequest:
+      description: 잘못된 요청 (스키마/형식 오류)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: "https://posefit.app/errors/bad-request"
+            title: "Bad Request"
+            status: 400
+            code: "BAD_REQUEST"
+            detail: "Request body did not match schema."
+            errors:
+              - field: "exerciseSlug"
+                message: "must be a non-empty string"
+
+    Unauthorized:
+      description: 인증 필요 또는 토큰 무효
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: "https://posefit.app/errors/unauthorized"
+            title: "Unauthorized"
+            status: 401
+            code: "UNAUTHORIZED"
+            detail: "Access token is missing or expired."
+
+    Forbidden:
+      description: "권한 없음 (예: 본인 외 사용자의 리소스)"
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: "https://posefit.app/errors/forbidden"
+            title: "Forbidden"
+            status: 403
+            code: "FORBIDDEN"
+            detail: "You do not have access to this resource."
+
+    NotFound:
+      description: 리소스 없음
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: "https://posefit.app/errors/not-found"
+            title: "Not Found"
+            status: 404
+            code: "NOT_FOUND"
+            detail: "Workout session 50220 not found."
+
+    Conflict:
+      description: 상태 충돌 — 비즈니스 invariant 위반 시
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: "https://posefit.app/errors/session-already-active"
+            title: "Conflict"
+            status: 409
+            code: "SESSION_ALREADY_ACTIVE"
+            detail: "An in_progress session already exists. Stop it before starting a new one."
+
+    UnprocessableEntity:
+      description: |
+        검증 통과했으나 도메인 의미 처리 불가능. 예:
+        FACE_NOT_DETECTED / FACE_MISMATCH / FACE_REQUIRED / EXERCISE_INACTIVE / DATE_RANGE_IN_FUTURE.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: "https://posefit.app/errors/face-required"
+            title: "Face data required"
+            status: 422
+            code: "FACE_REQUIRED"
+            detail: "Register your face before starting a workout."
+
+    RateLimited:
+      description: Rate limit 초과
+      headers:
+        Retry-After:
+          schema: { type: integer }
+          description: 재시도까지 권장 대기(초).
+        X-RateLimit-Limit:
+          schema: { type: integer }
+        X-RateLimit-Remaining:
+          schema: { type: integer }
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: "https://posefit.app/errors/rate-limited"
+            title: "Too Many Requests"
+            status: 429
+            code: "RATE_LIMITED"
+            detail: "Slow down."
+
+  # ===========================================================================
+  # Schemas
+  # ===========================================================================
+  schemas:
+
+    # ---- Error model (RFC 7807) -------------------------------------------
+    Problem:
+      type: object
+      description: RFC 7807 Problem Details + 도메인 확장(code, traceId, errors).
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: 오류 종류를 식별하는 URI.
+        title:
+          type: string
+          description: 사람이 읽을 수 있는 짧은 요약.
+        status:
+          type: integer
+          description: HTTP 상태 코드.
+        detail:
+          type: ["string", "null"]
+          description: 사용자에게 보여줄 메시지.
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        traceId:
+          type: ["string", "null"]
+          description: 분산 트레이싱 ID (CS 문의 대응용).
+        errors:
+          type: ["array", "null"]
+          description: 필드별 검증 오류 (BadRequest 에 한정).
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field: { type: string }
+              message: { type: string }
+
+    ErrorCode:
+      type: string
+      description: 도메인 에러 키. 프론트엔드 분기 키로 안정 사용.
+      enum:
+        - BAD_REQUEST
+        - UNAUTHORIZED
+        - FORBIDDEN
+        - NOT_FOUND
+        - CONFLICT
+        - RATE_LIMITED
+        # 도메인
+        - FACE_REQUIRED
+        - FACE_ALREADY_REGISTERED
+        - FACE_NOT_DETECTED
+        - MULTIPLE_FACES_DETECTED
+        - FACE_MISMATCH
+        - SESSION_ALREADY_ACTIVE
+        - SESSION_NOT_IN_PROGRESS
+        - SESSION_NOT_COMPLETED
+        - EXERCISE_INACTIVE
+        - LAST_SOCIAL_ACCOUNT
+        - SOCIAL_ALREADY_LINKED
+        - DATE_RANGE_IN_FUTURE
+        - DATE_RANGE_INVALID
+        - VIDEO_NOT_UPLOADED
+        - VIDEO_TOO_LARGE
+        - INVALID_OBJECT_KEY
+        - WITHDRAWN_USER
+
+    # ---- Auth -------------------------------------------------------------
+    AuthSocialCallbackRequest:
+      type: object
+      description: 프론트엔드가 OAuth provider 의 redirect 에서 받은 code 를 전달.
+      required: [code, redirectUri]
+      properties:
+        code:
+          type: string
+          description: OAuth authorization code.
+        redirectUri:
+          type: string
+          format: uri
+          description: OAuth 흐름에서 사용한 redirect_uri (provider 검증용).
+        state:
+          type: ["string", "null"]
+          description: CSRF state (있을 경우).
+
+    AuthSocialCallbackResponse:
+      type: object
+      description: 로그인 또는 가입 성공 시 토큰·사용자 합본.
+      required: [accessToken, refreshToken, accessTokenExpiresIn, isNewUser, user]
+      properties:
+        accessToken:
+          type: string
+          description: JWT access (15분).
+        refreshToken:
+          type: string
+          description: JWT refresh (14일).
+        accessTokenExpiresIn:
+          type: integer
+          description: access 만료까지 초.
+        isNewUser:
+          type: boolean
+          description: true 면 클라이언트는 `/users/me/face` 로 이어진다.
+        user:
+          $ref: '#/components/schemas/User'
+
+    AuthRefreshRequest:
+      type: object
+      description: refresh token 으로 access 재발급.
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+
+    AuthRefreshResponse:
+      type: object
+      description: 재발급된 access 토큰.
+      required: [accessToken, accessTokenExpiresIn]
+      properties:
+        accessToken: { type: string }
+        accessTokenExpiresIn: { type: integer }
+
+    # ---- User -------------------------------------------------------------
+    User:
+      type: object
+      description: 본인 프로필. faceEmbedding 은 응답에 절대 포함되지 않음.
+      required: [id, nickname, role, status, registrationStep, createdAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        email:
+          type: ["string", "null"]
+          format: email
+          description: "[PII] 표시·CS용. 카카오 미제공 케이스로 NULL 가능."
+        nickname:
+          type: string
+          maxLength: 50
+        role:
+          type: string
+          enum: [user, admin]
+          description: admin 은 Phase 2.
+        status:
+          type: string
+          enum: [active, withdrawn]
+        registrationStep:
+          type: string
+          enum: [face_required, complete]
+          description: |
+            Derived (ERD 미저장) — face_embeddings row 존재 여부.
+            가입 직후엔 face_required, 얼굴 등록 후 complete.
+        createdAt:
+          type: string
+          format: date-time
+
+    UserUpdateRequest:
+      type: object
+      description: 닉네임만 수정 (현재).
+      properties:
+        nickname:
+          type: string
+          minLength: 1
+          maxLength: 50
+
+    DashboardResponse:
+      type: object
+      description: SCR-02 대시보드 단건 합본 응답.
+      required: [weeklySessionsCount, lifetimeSessionsCount, recentSessions]
+      properties:
+        recentScore:
+          type: ["integer", "null"]
+          description: 최근 completed 세션 점수. 없으면 NULL.
+        weeklySessionsCount:
+          type: integer
+          description: 이번 주(월~일, KST) 세션 수.
+        lifetimeSessionsCount:
+          type: integer
+        recentSessions:
+          type: array
+          description: 최근 N건의 축약 세션 (기본 5건).
+          items:
+            $ref: '#/components/schemas/WorkoutSessionSummary'
+    # ---- Social account ---------------------------------------------------
+    SocialAccount:
+      type: object
+      description: 연결된 소셜 계정 1건. erd.dbml social_accounts 와 1:1.
+      required: [provider, linkedAt]
+      properties:
+        provider:
+          type: string
+          enum: [google, kakao]
+        providerEmail:
+          type: ["string", "null"]
+          format: email
+          description: "[PII] 소셜 측 이메일. NULL 가능."
+        linkedAt:
+          type: string
+          format: date-time
+          description: 최초 연동 시각 (social_accounts.created_at).
+
+    # ---- Face -------------------------------------------------------------
+    FaceRegistrationForm:
+      type: object
+      description: multipart/form-data 의 JPEG/PNG 정면 얼굴 이미지.
+      required: [image]
+      properties:
+        image:
+          type: string
+          format: binary
+
+    FaceRegistrationResponse:
+      type: object
+      description: 얼굴 임베딩 등록·재등록 응답. 임베딩 자체는 노출 안 함.
+      required: [registeredAt, modelVersion]
+      properties:
+        registeredAt:
+          type: string
+          format: date-time
+        modelVersion:
+          type: string
+          description: 임베딩 추출 모델 버전.
+
+    # ---- Videos summary / purge ------------------------------------------
+    VideosSummaryResponse:
+      type: object
+      description: 저장 영상 합계 (개수·바이트).
+      required: [count, totalBytes]
+      properties:
+        count:
+          type: integer
+          description: saved=true 세션 수.
+        totalBytes:
+          type: integer
+          format: int64
+
+    PurgeAcceptedResponse:
+      type: object
+      description: 영상 일괄 삭제 접수 결과.
+      required: [purgedSessionsCount, freedBytes]
+      properties:
+        purgedSessionsCount: { type: integer }
+        freedBytes: { type: integer, format: int64 }
+
+    # ---- Exercise ---------------------------------------------------------
+    Exercise:
+      type: object
+      description: 운동 종목 상세. erd.dbml exercises 와 1:1.
+      required: [slug, name, difficulty, bodyPart, metricType, referenceVideoUrl, isActive]
+      properties:
+        slug: { type: string }
+        name: { type: string }
+        nameEn:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        thumbnailUrl:
+          type: ["string", "null"]
+          format: uri
+        referenceVideoUrl:
+          type: string
+          format: uri
+        difficulty:
+          type: string
+          enum: [beginner, intermediate, advanced]
+        bodyPart:
+          type: string
+          enum: [lower, upper, core, full]
+        metricType:
+          type: string
+          enum: [reps, duration]
+          description: 점수 산정 방식. reps=동작 횟수, duration=자세 유지 시간.
+        isActive:
+          type: boolean
+
+    ExerciseSummary:
+      type: object
+      description: 목록용 축약. userAvgScore 는 호출자 본인 평균(derived).
+      required: [slug, name, difficulty, bodyPart, metricType]
+      properties:
+        slug: { type: string }
+        name: { type: string }
+        nameEn:
+          type: ["string", "null"]
+        difficulty:
+          type: string
+          enum: [beginner, intermediate, advanced]
+        bodyPart:
+          type: string
+          enum: [lower, upper, core, full]
+        metricType:
+          type: string
+          enum: [reps, duration]
+        thumbnailUrl:
+          type: ["string", "null"]
+          format: uri
+        userAvgScore:
+          type: ["integer", "null"]
+          description: Derived — workout_daily_stats 집계. 미수행 종목은 NULL.
+
+    ExerciseListResponse:
+      type: object
+      description: 운동 목록 페이지네이션 응답.
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExerciseSummary'
+        nextCursor:
+          type: ["string", "null"]
+
+    ReferenceKeypointFrame:
+      type: object
+      description: 정답 영상 한 프레임의 키포인트 + bbox.
+      required: [frameIndex, keypoints]
+      properties:
+        frameIndex: { type: integer }
+        keypoints:
+          type: array
+          description: 17개 관절 [x, y] 정규화 좌표 (0~1).
+          items:
+            type: array
+            items: { type: number }
+            minItems: 2
+            maxItems: 2
+        bbox:
+          type: ["array", "null"]
+          description: "[x, y, w, h] 정규화."
+          items: { type: number }
+          minItems: 4
+          maxItems: 4
+
+    ReferenceKeypointSequence:
+      type: object
+      description: 운동 정답 영상의 키포인트 전체 시퀀스.
+      required: [exerciseSlug, frameCount, frames]
+      properties:
+        exerciseSlug: { type: string }
+        frameCount: { type: integer }
+        frames:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferenceKeypointFrame'
+    # ---- Session ----------------------------------------------------------
+    EmbeddedExercise:
+      type: object
+      description: 세션 응답에 임베드되는 운동 축약(slug+name).
+      required: [slug, name]
+      properties:
+        slug: { type: string }
+        name: { type: string }
+
+    WorkoutSession:
+      type: object
+      description: 세션 상세. erd.dbml workout_sessions + 임베드 exercise.
+      required: [id, exercise, status, startedAt, saved]
+      properties:
+        id:
+          type: integer
+          format: int64
+        exercise:
+          $ref: '#/components/schemas/EmbeddedExercise'
+        status:
+          type: string
+          enum: [in_progress, completed, failed, aborted]
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: ["string", "null"]
+          format: date-time
+        durationSec:
+          type: ["integer", "null"]
+        score:
+          type: ["integer", "null"]
+          description: 0~100. completed 일 때만.
+        repCount:
+          type: ["integer", "null"]
+        holdSec:
+          type: ["integer", "null"]
+        saved:
+          type: boolean
+        videoUrl:
+          type: ["string", "null"]
+          format: uri
+          description: "[PII] saved=true 시에만 채움."
+
+    WorkoutSessionSummary:
+      type: object
+      description: 목록·대시보드용 축약. videoUrl/holdSec 제외.
+      required: [id, exercise, status, startedAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        exercise:
+          $ref: '#/components/schemas/EmbeddedExercise'
+        status:
+          type: string
+          enum: [in_progress, completed, failed, aborted]
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: ["string", "null"]
+          format: date-time
+        durationSec:
+          type: ["integer", "null"]
+        score:
+          type: ["integer", "null"]
+        repCount:
+          type: ["integer", "null"]
+        saved:
+          type: boolean
+
+    WorkoutSessionListResponse:
+      type: object
+      description: 세션 목록 페이지네이션 응답.
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkoutSessionSummary'
+        nextCursor:
+          type: ["string", "null"]
+
+    WorkoutSessionCreateRequest:
+      type: object
+      description: 세션 생성 요청. exerciseSlug 만 받는다.
+      required: [exerciseSlug]
+      properties:
+        exerciseSlug: { type: string }
+
+    StartSessionRequest:
+      type: object
+      description: 얼굴 매칭용 단일 프레임을 base64 로 동봉.
+      required: [faceFrameJpegBase64]
+      properties:
+        faceFrameJpegBase64:
+          type: string
+          description: data URI 의 base64 본문만(prefix 없이).
+
+    StartSessionResponse:
+      type: object
+      description: 얼굴 매칭 성공 + 트래킹 시작 응답.
+      required: [matched, trackingStartedAt]
+      properties:
+        matched:
+          type: boolean
+        trackingStartedAt:
+          type: string
+          format: date-time
+
+    FrameInput:
+      type: object
+      description: 단일 프레임 입력(클라/서버 추론 공통 입력 형식).
+      required: [frameIndex, timestampMs, keypoints, bbox]
+      properties:
+        frameIndex: { type: integer }
+        timestampMs:
+          type: integer
+          description: started_at 기준 경과 ms.
+        keypoints:
+          type: array
+          items:
+            type: array
+            items: { type: number }
+            minItems: 2
+            maxItems: 2
+        bbox:
+          type: array
+          items: { type: number }
+          minItems: 4
+          maxItems: 4
+
+    FrameBatchRequest:
+      type: object
+      description: 1~200 프레임의 chunked 배치.
+      required: [frames]
+      properties:
+        frames:
+          type: array
+          items:
+            $ref: '#/components/schemas/FrameInput'
+          minItems: 1
+          maxItems: 200
+
+    FrameBatchResponse:
+      type: object
+      description: 배치 수신 결과. 선택적으로 프레임별 오차 즉시 반환 가능.
+      required: [accepted, rejected]
+      properties:
+        accepted: { type: integer }
+        rejected: { type: integer }
+        frameErrors:
+          type: ["array", "null"]
+          items:
+            type: object
+            required: [frameIndex, error]
+            properties:
+              frameIndex: { type: integer }
+              error: { type: number }
+
+    StopSessionRequest:
+      type: object
+      description: |
+        시나리오 B(클라이언트 추론) 면 누적 frames 일괄 동봉.
+        시나리오 A(서버 추론) 면 frames 생략.
+      properties:
+        frames:
+          type: ["array", "null"]
+          items:
+            $ref: '#/components/schemas/FrameInput'
+          maxItems: 5000
+
+    StopSessionResponse:
+      type: object
+      description: STOP 처리 결과 — 세션 + 피드백 합본.
+      required: [session, feedbacks]
+      properties:
+        session:
+          $ref: '#/components/schemas/WorkoutSession'
+        feedbacks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Feedback'
+    SaveSessionRequest:
+      type: object
+      description: presign 응답의 objectKey 를 그대로 전달.
+      required: [objectKey]
+      properties:
+        objectKey:
+          type: string
+
+    VideoPresignRequest:
+      type: object
+      description: 영상 업로드 presigned URL 발급 요청.
+      required: [contentType, sizeBytes]
+      properties:
+        contentType:
+          type: string
+          enum: ["video/mp4", "video/webm"]
+        sizeBytes:
+          type: integer
+          format: int64
+          maximum: 524288000
+          description: 최대 500MB.
+
+    VideoPresignResponse:
+      type: object
+      description: presigned URL 발급 결과.
+      required: [uploadUrl, objectKey, method, expiresAt]
+      properties:
+        uploadUrl:
+          type: string
+          format: uri
+        objectKey:
+          type: string
+        method:
+          type: string
+          enum: [PUT]
+        headers:
+          type: object
+          additionalProperties: { type: string }
+          description: "PUT 시 함께 보내야 하는 헤더(예: Content-Type)."
+        expiresAt:
+          type: string
+          format: date-time
+
+    # ---- Feedback ---------------------------------------------------------
+    Feedback:
+      type: object
+      description: erd.dbml feedbacks 와 1:1.
+      required: [id, orderIndex, category, severity, generatedBy, content, createdAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        orderIndex:
+          type: integer
+        category:
+          type: string
+          enum: [posture, count, timing, overall]
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        generatedBy:
+          type: string
+          enum: [rule, llm]
+        llmModel:
+          type: ["string", "null"]
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    # ---- Reports ----------------------------------------------------------
+    CalendarDay:
+      type: object
+      description: 캘린더 1일 단위. workout_daily_stats 일자 집계.
+      required: [date, sessionsCount]
+      properties:
+        date:
+          type: string
+          format: date
+          description: KST 일자.
+        sessionsCount:
+          type: integer
+        avgScore:
+          type: ["integer", "null"]
+
+    CalendarResponse:
+      type: object
+      description: 활동 캘린더 응답.
+      required: [days]
+      properties:
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/CalendarDay'
+    ReportSummary:
+      type: object
+      description: |
+        workout_daily_stats 집계. period 에 따라 합산 범위가 달라짐.
+        cumulative 면 periodStart 는 가입일, periodEnd 는 오늘.
+      required: [period, periodStart, periodEnd, sessionsCount, totalDurationSec]
+      properties:
+        period:
+          type: string
+          enum: [day, week, month, cumulative]
+        periodStart:
+          type: string
+          format: date
+        periodEnd:
+          type: string
+          format: date
+        sessionsCount:
+          type: integer
+        totalDurationSec:
+          type: integer
+        avgScore:
+          type: ["integer", "null"]
+        bestExercise:
+          type: ["object", "null"]
+          description: 기간 내 최고 평균 점수 종목. 데이터 없으면 NULL.
+          required: [slug, name, bestScore]
+          properties:
+            slug: { type: string }
+            name: { type: string }
+            bestScore: { type: integer }
+
+    ScoreTrendPoint:
+      type: object
+      description: 점수 추이 차트의 1포인트.
+      required: [date, avgScore]
+      properties:
+        date:
+          type: string
+          format: date
+        avgScore:
+          type: integer
+
+    ScoreTrendSeries:
+      type: object
+      description: 종목별 시계열.
+      required: [exerciseSlug, exerciseName, points]
+      properties:
+        exerciseSlug: { type: string }
+        exerciseName: { type: string }
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScoreTrendPoint'
+    ScoreTrendResponse:
+      type: object
+      description: 종목별 시리즈 배열.
+      required: [series]
+      properties:
+        series:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScoreTrendSeries'
+# =============================================================================
+# (10) 안티패턴 자가점검
+# =============================================================================
+# [x] 필드명 일관성
+#     — 세션 식별자는 path / response / request 모두 `id`. sessionId/workoutSessionId 혼용 없음.
+#     — exerciseSlug 는 path·query·body 전부 동일 이름.
+# [x] ERD 없는 필드는 derived 표시
+#     — User.registrationStep, ExerciseSummary.userAvgScore 만 derived.
+#         schema description 에 "Derived" 라벨.
+#     — 그 외 응답 필드는 모두 erd.dbml 컬럼에 1:1 대응.
+# [x] 4xx/5xx 응답은 components.responses 재사용
+#     — BadRequest / Unauthorized / Forbidden / NotFound / Conflict /
+#         UnprocessableEntity / RateLimited 전부 $ref.
+#     — 인라인 4xx 응답은 :start 의 422 한 곳뿐(코드별 예시 다양화 목적).
+# [x] 모든 200/201 응답에 example 포함
+#     — 각 operation 의 응답에 example 명시.
+# [x] enum 은 schema 차원 정의 + 재사용
+#     — provider/role/status/difficulty/bodyPart/metricType/category/severity/
+#         generatedBy/sessionStatus/period — schemas 또는 parameters 의 schema 에서 정의.
+#     — path/query 인라인 enum 중복 없음.
+# [x] 페이지네이션·정렬·필터 컨벤션 통일
+#     — cursor + limit 으로 통일. items + nextCursor 응답 모양 통일.
+#     — 정렬은 endpoint 고정 (sessions: endedAt DESC). 외부 정렬 옵션 없음.
+#     — 날짜 범위 from/to inclusive. 미래 날짜는 422 DATE_RANGE_IN_FUTURE.
+# [x] PII 필드 노출 통제
+#     — faceEmbedding: 응답 schema 어디에도 없음 (등록·삭제만).
+#     — email, providerEmail, videoUrl: schema description 에 [PII] 마킹.
+# [x] operationId / tags 누락 없음
+#     — 모든 operation 에 camelCase operationId + 적절한 tags.
+# [x] path / query parameter 모두 정의 + example
+#     — 공용은 components.parameters, 개별은 inline. 모두 example 보유.
+# [x] securitySchemes 선언 + 인증 endpoint 만 security: [] 로 빼냄
+#     — bearerAuth 전역. /auth/social/{provider}/callback, /auth/refresh 만 예외.
+#
+# =============================================================================
+# ERD 갱신 요청 (있다면)
+# =============================================================================
+# 현재 시점에 ERD 갱신 요청 사항 없음.
+#
+# 본 명세의 derived 필드는 모두 application 단 계산이며, 어디서 도출되는지
+# 각 schema description 에 명시:
+#   - User.registrationStep         → face_embeddings row 존재 여부
+#   - ExerciseSummary.userAvgScore  → workout_daily_stats 집계
+#   - DashboardResponse.*           → workout_sessions + workout_daily_stats
+#   - CalendarDay / ReportSummary / ScoreTrend* → workout_daily_stats
+#
+# =============================================================================
+# 부록: WebSocket 채택 시 (참고, OpenAPI 본문에 미포함)
+# =============================================================================
+# 실시간 프레임 전송을 WebSocket 으로 전환 검토 시, 본 spec REST 흐름은
+# /workout-sessions/{id}/frames 만 대체되고 나머지는 그대로 유지.
+#
+# x-websocket:
+#   /workout-sessions/{id}/stream:
+#     auth: Bearer JWT (Sec-WebSocket-Protocol)
+#     messages:
+#       client_to_server:
+#         - type: "frame"
+#           payload: { frameIndex, timestampMs, keypoints, bbox }
+#       server_to_client:
+#         - type: "frame_error"
+#           payload: { frameIndex, error }
+#         - type: "session_status"
+#           payload: { status }
