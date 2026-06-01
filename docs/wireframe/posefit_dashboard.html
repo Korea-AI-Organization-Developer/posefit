@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>포즈핏 — 메인 대시보드 SCR-05</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #f5f5f0;
+    --frame-bg: #ffffff;
+    --line: #2b2b2b;
+    --line-soft: #8a8a8a;
+    --line-faint: #c8c8c8;
+    --fill-light: #ececec;
+    --fill-mid: #d8d8d8;
+    --fill-dark: #b8b8b8;
+    --accent-red: #d94545;
+    --accent-green: #4a9d5f;
+    --accent-blue: #3b6ea8;
+    --note: #b8651a;
+    --paper: #fafaf5;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 48px 32px;
+    background: var(--bg);
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(0,0,0,0.08) 1px, transparent 0);
+    background-size: 24px 24px;
+    font-family: 'IBM Plex Sans KR', sans-serif;
+    color: var(--line);
+    font-weight: 400;
+  }
+
+  /* Doc header */
+  .doc-header {
+    max-width: 1280px;
+    margin: 0 auto 48px;
+    padding-bottom: 24px;
+    border-bottom: 2px solid var(--line);
+  }
+  .doc-title {
+    font-size: 32px;
+    font-weight: 600;
+    margin: 0 0 8px;
+    letter-spacing: -0.5px;
+  }
+  .doc-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--line-soft);
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .doc-meta span b { color: var(--line); font-weight: 500; }
+
+  /* Screen layout */
+  .screen {
+    max-width: 1280px;
+    margin: 0 auto 80px;
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 32px;
+    align-items: start;
+  }
+  .screen-label {
+    position: sticky;
+    top: 24px;
+    padding: 16px 18px;
+    background: var(--paper);
+    border: 1.5px solid var(--line);
+    border-left: 6px solid var(--line);
+  }
+  .screen-id {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--note);
+    letter-spacing: 0.5px;
+  }
+  .screen-name {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 4px 0 10px;
+    line-height: 1.3;
+  }
+  .screen-desc {
+    font-size: 12px;
+    color: var(--line-soft);
+    line-height: 1.5;
+  }
+  .screen-features {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--line-faint);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--line-soft);
+    line-height: 1.7;
+  }
+
+  /* Frame */
+  .frame {
+    background: var(--frame-bg);
+    border: 2px solid var(--line);
+    aspect-ratio: 16 / 10;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 8px 8px 0 var(--line);
+  }
+  .frame::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 24px;
+    background: var(--fill-light);
+    border-bottom: 1.5px solid var(--line);
+  }
+  .frame::after {
+    content: "● ● ●";
+    position: absolute;
+    top: 4px; left: 10px;
+    font-size: 9px;
+    letter-spacing: 4px;
+    color: var(--line-soft);
+  }
+  .frame-url {
+    position: absolute;
+    top: 4px; left: 50%;
+    transform: translateX(-50%);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--line-soft);
+    background: var(--frame-bg);
+    padding: 0 12px;
+    border-radius: 2px;
+  }
+  .canvas {
+    position: absolute;
+    top: 24px; left: 0; right: 0; bottom: 0;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Common element styles */
+  .label { font-size: 11px; color: var(--line); }
+  .label-mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--line-soft);
+  }
+  .label-tiny {
+    font-size: 9px;
+    color: var(--line-soft);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* SCR-05 Dashboard (원본 SCR-02) */
+  .nav-top {
+    height: 36px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    border: 1.5px solid var(--line);
+    margin-bottom: 12px;
+    background: var(--paper);
+    gap: 16px;
+  }
+  .nav-logo {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 8px;
+    background: var(--line);
+    color: var(--frame-bg);
+  }
+  .nav-links { display: flex; gap: 18px; font-size: 11px; }
+  .nav-link.active { font-weight: 600; border-bottom: 2px solid var(--line); padding-bottom: 2px; }
+  .nav-spacer { flex: 1; }
+  .nav-user {
+    width: 24px; height: 24px;
+    border: 1.5px solid var(--line);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    background: var(--fill-light);
+  }
+
+  .dash-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 12px;
+    min-height: 0;
+  }
+  .dash-left { display: flex; flex-direction: column; gap: 12px; }
+  .summary-cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .summary-card {
+    border: 1.5px solid var(--line);
+    padding: 10px;
+    background: var(--frame-bg);
+  }
+  .summary-card .label-tiny { display: block; margin-bottom: 4px; }
+  .summary-card .summary-val { font-size: 22px; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+
+  .big-cta {
+    flex: 1;
+    border: 2px solid var(--line);
+    background: var(--line);
+    color: var(--frame-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 4px;
+    cursor: pointer;
+  }
+  .big-cta .cta-title { font-size: 18px; font-weight: 600; }
+  .big-cta .cta-sub { font-size: 10px; opacity: 0.7; font-family: 'JetBrains Mono', monospace; }
+
+  .dash-right { display: flex; flex-direction: column; gap: 12px; }
+  .panel {
+    border: 1.5px solid var(--line);
+    padding: 10px;
+    background: var(--frame-bg);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .panel-title { font-size: 11px; font-weight: 600; margin-bottom: 8px; display: flex; justify-content: space-between; }
+  .history-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--line-faint);
+    font-size: 10px;
+    align-items: center;
+  }
+  .history-row:last-child { border-bottom: none; }
+  .calendar-mini {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+    margin-top: 4px;
+  }
+  .cal-cell {
+    aspect-ratio: 1;
+    border: 1px solid var(--line-faint);
+    background: var(--fill-light);
+  }
+  .cal-cell.active1 { background: var(--fill-mid); }
+  .cal-cell.active2 { background: var(--fill-dark); }
+  .cal-cell.active3 { background: var(--line); }
+
+  /* Callouts */
+  .frame-wrap { position: relative; }
+  .callouts {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--note);
+  }
+  .callout {
+    border-left: 2px solid var(--note);
+    padding: 4px 10px;
+    background: var(--paper);
+    line-height: 1.5;
+  }
+  .callout b { color: var(--line); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<!-- ─────────────────── DOC HEADER ─────────────────── -->
+<div class="doc-header">
+  <h1 class="doc-title">포즈핏 (PoseFit) — 메인 대시보드 SCR-05</h1>
+  <div class="doc-meta">
+    <span><b>FILE</b> posefit_dashboard.html</span>
+    <span><b>DATE</b> 2026-05-29</span>
+    <span><b>SCREENS</b> SCR-05</span>
+    <span><b>BASIS</b> 요구사항정의서 v1.0</span>
+  </div>
+</div>
+
+<!-- ============================================== -->
+<!-- SCR-05 메인 대시보드 (원본 SCR-02)             -->
+<!-- ============================================== -->
+<section class="screen scr05">
+  <aside class="screen-label">
+    <div class="screen-id">SCR-05</div>
+    <div class="screen-name">메인 (대시보드)</div>
+    <div class="screen-desc">로그인 후 진입. 운동하기 / 리포트 / 설정 진입점 + 최근 운동 요약.</div>
+    <div class="screen-features">
+      MAIN-01 대시보드 표시<br>
+      MAIN-02 이전 운동 데이터<br>
+      MAIN-03 운동하기 진입<br>
+      MAIN-04 리포트 진입<br>
+      MAIN-05 설정 진입<br>
+      MAIN-06 히스토리 요약
+    </div>
+  </aside>
+  <div class="frame-wrap">
+    <div class="frame">
+      <div class="frame-url">posefit.app / dashboard</div>
+      <div class="canvas">
+        <div class="nav-top">
+          <div class="nav-logo">PoseFit</div>
+          <div class="nav-links">
+            <span class="nav-link active">대시보드</span>
+            <span class="nav-link">운동하기</span>
+            <span class="nav-link">리포트</span>
+            <span class="nav-link">설정</span>
+          </div>
+          <div class="nav-spacer"></div>
+          <span class="label-tiny">홍길동 님</span>
+          <div class="nav-user">👤</div>
+        </div>
+
+        <div class="dash-grid">
+          <div class="dash-left">
+            <div class="summary-cards">
+              <div class="summary-card">
+                <span class="label-tiny">최근 점수</span>
+                <div class="summary-val">87<span style="font-size:12px;color:var(--line-soft);">/100</span></div>
+              </div>
+              <div class="summary-card">
+                <span class="label-tiny">이번 주 운동</span>
+                <div class="summary-val">4<span style="font-size:12px;color:var(--line-soft);">회</span></div>
+              </div>
+              <div class="summary-card">
+                <span class="label-tiny">누적 운동</span>
+                <div class="summary-val">23<span style="font-size:12px;color:var(--line-soft);">회</span></div>
+              </div>
+            </div>
+
+            <div class="big-cta">
+              <div class="cta-title">▶ 운동 시작하기</div>
+              <div class="cta-sub">→ SCR-06 운동 선택</div>
+            </div>
+          </div>
+
+          <div class="dash-right">
+            <div class="panel">
+              <div class="panel-title">최근 운동 기록 <span class="label-tiny">→ 클릭 시 리포트</span></div>
+              <div class="history-row">
+                <span><b>런지</b> · 어제 18:30</span>
+                <span class="label-mono" style="font-weight:600;">92점</span>
+              </div>
+              <div class="history-row">
+                <span><b>플랭크</b> · 그저께 09:15</span>
+                <span class="label-mono" style="font-weight:600;">85점</span>
+              </div>
+              <div class="history-row">
+                <span><b>푸쉬업</b> · 3일 전</span>
+                <span class="label-mono" style="font-weight:600;">81점</span>
+              </div>
+              <div class="history-row">
+                <span><b>오버헤드프레스</b> · 4일 전</span>
+                <span class="label-mono" style="font-weight:600;">78점</span>
+              </div>
+            </div>
+
+            <div class="panel" style="flex:0 0 auto;">
+              <div class="panel-title">최근 30일 활동 <span class="label-tiny">MAIN-06</span></div>
+              <div class="calendar-mini">
+                <div class="cal-cell"></div><div class="cal-cell active1"></div><div class="cal-cell"></div>
+                <div class="cal-cell active2"></div><div class="cal-cell"></div><div class="cal-cell"></div>
+                <div class="cal-cell active1"></div><div class="cal-cell"></div><div class="cal-cell active3"></div>
+                <div class="cal-cell active2"></div><div class="cal-cell"></div><div class="cal-cell"></div>
+                <div class="cal-cell"></div><div class="cal-cell active1"></div><div class="cal-cell active2"></div>
+                <div class="cal-cell"></div><div class="cal-cell"></div><div class="cal-cell active3"></div>
+                <div class="cal-cell active2"></div><div class="cal-cell"></div><div class="cal-cell"></div>
+                <div class="cal-cell active1"></div><div class="cal-cell"></div><div class="cal-cell"></div>
+                <div class="cal-cell active2"></div><div class="cal-cell"></div><div class="cal-cell active3"></div>
+                <div class="cal-cell"></div><div class="cal-cell"></div><div class="cal-cell active1"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="callouts">
+      <div class="callout"><b>MAIN-01</b> 진입 즉시 보이는 KPI 카드 3종: 최근 점수, 주간 운동 횟수, 누적 횟수.</div>
+      <div class="callout"><b>MAIN-03</b> 가장 큰 버튼 = "운동 시작하기" (CTA). 클릭 시 SCR-06 운동 선택으로 이동.</div>
+      <div class="callout"><b>MAIN-02</b> 최근 N건의 운동 기록. 각 행 클릭 시 해당 결과/리포트 화면(SCR-09)으로 이동.</div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>
