@@ -19,6 +19,7 @@
 | --- | --- |
 | 프론트엔드 | Next.js, TailwindCSS |
 | 백엔드 | FastAPI |
+| ORM | SQLAlchemy |
 | 데이터베이스 | MySQL |
 | 객체 트래킹 (검토 중) | OpenCV CSRT / YOLO + ByteTracker / YOLO + OSTrack / SAM2 |
 | 포즈 추정 | **ViTPose-Base** (확정) — Top-down 방식, 서버 GPU 추론 |
@@ -212,7 +213,7 @@ START 버튼 클릭 후 STOP까지의 영상 처리 파이프라인은 다음 �
 
 ## 6. 데이터 요구사항 (개요)
 
-MySQL 기반의 주요 엔티티는 다음과 같다. 상세 스키마는 별도 ERD 문서에서 정의한다.
+MySQL 기반의 주요 엔티티는 다음과 같으며, SQLAlchemy ORM 모델로 매핑한다. 상세 스키마는 별도 ERD 문서에서 정의한다.
 
 | 엔티티 | 주요 필드 |
 | --- | --- |
