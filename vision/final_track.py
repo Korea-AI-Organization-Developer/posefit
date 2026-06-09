@@ -5,54 +5,10 @@ final_track.py - YOLO11 + ByteTrack 다중 객체 추적
     python final_track.py
     python final_track.py --source video.mp4
     python final_track.py --conf 0.4
-
-모델 파일 (최초 실행 시 자동 다운로드):
-    yolo11n.pt  (~5 MB)
 """
 
 import argparse
-import cv2
-
-
-class ByteTrackTracker:
-    """YOLO11 + ByteTrack 다중 객체 추적기.
-
-    Parameters
-    ----------
-    model_name : str
-        ultralytics YOLO 모델 이름 (기본: yolo11n.pt)
-    conf : float
-        검출 신뢰도 임계값 (기본: 0.3)
-    """
-
-    def __init__(self, model_name: str = "yolo11n.pt", conf: float = 0.3):
-        from ultralytics import YOLO
-        self.model = YOLO(model_name)
-        self.conf  = conf
-
-    def run(self, source: int | str = 0) -> None:
-        """추적 루프 실행. q / ESC 로 종료.
-
-        Parameters
-        ----------
-        source : int | str
-            0 = 웹캠, 또는 영상 파일 경로
-        """
-        print(f"[ByteTrack] source={source}  conf={self.conf}  q/ESC=종료")
-
-        for result in self.model.track(
-            source=source,
-            conf=self.conf,
-            tracker="bytetrack.yaml",
-            stream=True,
-            verbose=False,
-        ):
-            frame = result.plot()
-            cv2.imshow("ByteTrack", frame)
-            if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
-                break
-
-        cv2.destroyAllWindows()
+from lib.byte_tracker import ByteTrackTracker
 
 
 def main() -> None:
