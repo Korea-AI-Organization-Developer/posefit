@@ -9,9 +9,6 @@ venv/
 # Env
 .env
 
-# Alembic
-alembic/versions/*.py
-
 # IDE
 .idea/
 .vscode/
