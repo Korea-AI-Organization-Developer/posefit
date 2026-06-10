@@ -2,9 +2,8 @@
 
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import FaceCapture from "../components/FaceCapture";
 
-type Step = "social" | "profile" | "agreement" | "face";
+type Step = "social" | "profile" | "agreement";
 
 interface ProfileForm {
   nickname: string;
@@ -40,7 +39,6 @@ function SignupContent() {
     biometric: false,
     marketing: false,
   });
-  const [accessToken, setAccessToken] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -54,11 +52,10 @@ function SignupContent() {
     { key: "social", label: "소셜 연동" },
     { key: "profile", label: "기본 정보" },
     { key: "agreement", label: "약관 동의" },
-    { key: "face", label: "얼굴 등록" },
   ];
   const stepIndex = steps.findIndex((s) => s.key === step);
 
-  async function handleSignupComplete() {
+  async function handleComplete() {
     if (!requiredAgreed || submitting) return;
     setSubmitting(true);
     setError("");
@@ -88,30 +85,12 @@ function SignupContent() {
 
       const { access_token } = await res.json();
       localStorage.setItem("access_token", access_token);
-      setAccessToken(access_token);
-      setStep("face");
+      router.push("/signup/complete");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "오류가 발생했습니다");
     } finally {
       setSubmitting(false);
     }
-  }
-
-  async function handleFaceRegister(base64: string) {
-    try {
-      const res = await fetch("http://localhost:8000/api/face/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ image: base64 }),
-      });
-      if (!res.ok) throw new Error("얼굴 등록 실패");
-    } catch {
-      // 얼굴 등록 실패해도 완료 페이지로 이동
-    }
-    router.push("/signup/complete");
   }
 
   return (
@@ -133,33 +112,27 @@ function SignupContent() {
         </div>
 
         {/* 스텝 인디케이터 */}
-        <div className="flex items-center mb-6 px-2">
+        <div className="flex items-start mb-6">
           {steps.map((s, i) => (
-            <div key={s.key} className="flex items-center flex-1">
-              <div className="flex flex-col items-center flex-1">
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-colors ${
-                    i < stepIndex
-                      ? "bg-emerald-500 text-white"
-                      : i === stepIndex
-                      ? "bg-emerald-500 text-white ring-4 ring-emerald-500/30"
-                      : "bg-slate-700 text-slate-400"
-                  }`}
-                >
+            <div key={s.key} className={`flex items-start ${i < steps.length - 1 ? "flex-1" : ""}`}>
+              <div className="flex flex-col items-center">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-colors ${
+                  i < stepIndex ? "bg-emerald-500 text-white"
+                  : i === stepIndex ? "bg-emerald-500 text-white ring-4 ring-emerald-500/30"
+                  : "bg-slate-700 text-slate-400"
+                }`}>
                   {i < stepIndex ? (
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                     </svg>
-                  ) : (
-                    i + 1
-                  )}
+                  ) : i + 1}
                 </div>
-                <span className={`mt-1 text-xs font-medium ${i === stepIndex ? "text-emerald-400" : "text-slate-500"}`}>
+                <span className={`mt-1 text-xs font-medium text-center ${i === stepIndex ? "text-emerald-400" : "text-slate-500"}`}>
                   {s.label}
                 </span>
               </div>
               {i < steps.length - 1 && (
-                <div className={`h-0.5 flex-1 mx-1 mb-4 rounded ${i < stepIndex ? "bg-emerald-500" : "bg-slate-700"}`} />
+                <div className={`flex-1 h-0.5 mt-4 mx-2 rounded ${i < stepIndex ? "bg-emerald-500" : "bg-slate-700"}`} />
               )}
             </div>
           ))}
@@ -190,14 +163,8 @@ function SignupContent() {
               onChange={setAgreements}
               onBack={() => setStep("profile")}
               requiredAgreed={requiredAgreed}
-              onComplete={handleSignupComplete}
+              onComplete={handleComplete}
               submitting={submitting}
-            />
-          )}
-          {step === "face" && (
-            <StepFace
-              onCapture={handleFaceRegister}
-              onSkip={() => router.push("/signup/complete")}
             />
           )}
         </div>
@@ -227,22 +194,20 @@ function StepSocial() {
     <div>
       <h2 className="text-xl font-semibold text-white mb-1">소셜 계정 연동</h2>
       <p className="text-slate-400 text-sm mb-8">구글 계정으로 가입을 시작합니다</p>
-      <a
-        href="http://localhost:8000/api/auth/google"
+      <button
+        onClick={() => { window.location.href = "http://localhost:8000/api/auth/google?source=signup"; }}
         className="flex items-center justify-center gap-3 w-full py-3 px-4 bg-white hover:bg-gray-50 text-gray-800 font-medium rounded-xl transition-all duration-200 shadow-md hover:shadow-lg active:scale-[0.98]"
       >
         <GoogleIcon />
         Google로 계속하기
-      </a>
+      </button>
       <p className="mt-6 text-center text-xs text-slate-500">구글 계정의 이름과 이메일을 가져옵니다</p>
     </div>
   );
 }
 
 /* ── Step 2: 기본 정보 ── */
-function StepProfile({
-  form, onChange, onNext, onBack, valid, hasTempToken,
-}: {
+function StepProfile({ form, onChange, onNext, onBack, valid, hasTempToken }: {
   form: ProfileForm;
   onChange: (f: ProfileForm) => void;
   onNext: () => void;
@@ -255,11 +220,11 @@ function StepProfile({
 
   return (
     <div>
-      <h2 className="text-xl font-semibold text-white mb-1">기본 정보 입력</h2>
-      <p className="text-slate-400 text-sm mb-6">
+      <h2 className="text-xl font-semibold text-white mb-1 text-center">기본 정보 입력</h2>
+      <p className="text-slate-400 text-sm mb-6 text-center">
         {hasTempToken ? "구글 연동 완료! 추가 정보를 입력해주세요" : "운동 분석에 활용됩니다"}
       </p>
-      <div className="space-y-4">
+      <div className="w-4/5 mx-auto space-y-4">
         <div>
           <label className="block text-sm font-medium text-slate-300 mb-1.5">
             닉네임 <span className="text-emerald-400">*</span>
@@ -282,7 +247,9 @@ function StepProfile({
             {[{ value: "M", label: "남성" }, { value: "F", label: "여성" }, { value: "U", label: "선택 안 함" }].map((opt) => (
               <button key={opt.value} type="button"
                 onClick={() => onChange({ ...form, gender: opt.value as "M" | "F" | "U" })}
-                className={`py-2.5 rounded-xl text-sm font-medium border transition-all ${form.gender === opt.value ? "bg-emerald-500 border-emerald-500 text-white" : "bg-slate-700/60 border-slate-600 text-slate-300 hover:border-slate-500"}`}>
+                className={`py-2.5 rounded-xl text-sm font-medium border transition-all ${
+                  form.gender === opt.value ? "bg-emerald-500 border-emerald-500 text-white" : "bg-slate-700/60 border-slate-600 text-slate-300 hover:border-slate-500"
+                }`}>
                 {opt.label}
               </button>
             ))}
@@ -301,7 +268,7 @@ function StepProfile({
           </div>
         </div>
       </div>
-      <div className="flex gap-3 mt-8">
+      <div className="w-4/5 mx-auto flex gap-3 mt-8">
         {!hasTempToken && (
           <button onClick={onBack} className="flex-1 py-2.5 rounded-xl border border-slate-600 text-slate-300 hover:bg-slate-700/60 transition-colors text-sm font-medium">이전</button>
         )}
@@ -315,9 +282,7 @@ function StepProfile({
 }
 
 /* ── Step 3: 약관 동의 ── */
-function StepAgreement({
-  form, onChange, onBack, requiredAgreed, onComplete, submitting,
-}: {
+function StepAgreement({ form, onChange, onBack, requiredAgreed, onComplete, submitting }: {
   form: AgreementForm;
   onChange: (f: AgreementForm) => void;
   onBack: () => void;
@@ -333,7 +298,7 @@ function StepAgreement({
   const items = [
     { key: "tos" as keyof AgreementForm, label: "서비스 이용약관 동의", required: true },
     { key: "privacy" as keyof AgreementForm, label: "개인정보 수집·이용 동의", required: true },
-    { key: "biometric" as keyof AgreementForm, label: "바이오정보(얼굴) 처리 동의", required: true, desc: "자세 분석 및 얼굴 인식 기능에 활용됩니다" },
+    { key: "biometric" as keyof AgreementForm, label: "바이오정보(얼굴) 처리 동의", required: true, desc: "자세 분석 기능에 활용됩니다" },
     { key: "marketing" as keyof AgreementForm, label: "마케팅 수신 동의", required: false, desc: "운동 팁, 업데이트 등 유용한 소식을 받습니다" },
   ];
 
@@ -368,58 +333,13 @@ function StepAgreement({
         <button disabled={!requiredAgreed || submitting} onClick={onComplete}
           className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 disabled:text-slate-500 text-white font-medium transition-colors text-sm flex items-center justify-center gap-2">
           {submitting && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>}
-          {submitting ? "처리 중..." : "다음"}
+          {submitting ? "처리 중..." : "가입 완료"}
         </button>
       </div>
     </div>
   );
 }
 
-/* ── Step 4: 얼굴 등록 ── */
-function StepFace({ onCapture, onSkip }: { onCapture: (base64: string) => void; onSkip: () => void }) {
-  const [captured, setCaptured] = useState(false);
-  const [capturedImage, setCapturedImage] = useState("");
-  const [uploading, setUploading] = useState(false);
-
-  async function handleConfirm() {
-    setUploading(true);
-    await onCapture(capturedImage);
-    setUploading(false);
-  }
-
-  return (
-    <div>
-      <h2 className="text-xl font-semibold text-white mb-1">얼굴 등록</h2>
-      <p className="text-slate-400 text-sm mb-4">
-        다음 로그인부터 얼굴 인식으로 자동 로그인됩니다
-      </p>
-
-      <FaceCapture
-        label="얼굴 촬영"
-        onCapture={(base64) => {
-          setCapturedImage(base64);
-          setCaptured(true);
-        }}
-      />
-
-      <div className="flex gap-3 mt-6">
-        <button onClick={onSkip} className="flex-1 py-2.5 rounded-xl border border-slate-600 text-slate-400 hover:bg-slate-700/60 transition-colors text-sm">
-          나중에 등록
-        </button>
-        <button
-          disabled={!captured || uploading}
-          onClick={handleConfirm}
-          className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 disabled:text-slate-500 text-white font-medium transition-colors text-sm flex items-center justify-center gap-2"
-        >
-          {uploading && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>}
-          {uploading ? "등록 중..." : "등록 완료"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* ── 공통 컴포넌트 ── */
 function Checkbox({ checked, className = "" }: { checked: boolean; className?: string }) {
   return (
     <div className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 border transition-colors ${checked ? "bg-emerald-500 border-emerald-500" : "bg-transparent border-slate-500"} ${className}`}>

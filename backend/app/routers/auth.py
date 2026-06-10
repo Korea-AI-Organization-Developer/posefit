@@ -14,8 +14,8 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.get("/google")
-async def google_login():
-    state = secrets.token_urlsafe(16)
+async def google_login(source: str = "login"):
+    state = f"{source}:{secrets.token_urlsafe(16)}"
     url = get_google_auth_url(state)
     return RedirectResponse(url)
 
@@ -23,16 +23,26 @@ async def google_login():
 @router.get("/google/callback")
 async def google_callback(
     code: str = Query(...),
+    state: str = Query(default="login:"),
     db: AsyncSession = Depends(get_db),
 ):
+    # state에서 source 추출 (예: "signup:abc123" → "signup")
+    source = state.split(":")[0] if ":" in state else "login"
+
     try:
         user, temp_token = await AuthService(db).handle_google_callback(code)
-    except Exception:
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[OAuth 오류] {e}")
         return RedirectResponse(f"{settings.frontend_url}/login?error=oauth_failed")
 
     if user:
-        # 기존 유저 → JWT 발급 후 대시보드로
         token = make_access_token(user.id)
+        if source == "signup":
+            # 회원가입 시도했는데 이미 가입된 회원
+            return RedirectResponse(f"{settings.frontend_url}/signup/already-member?token={token}")
+        # 로그인 → 대시보드로
         return RedirectResponse(f"{settings.frontend_url}/?token={token}")
 
     # 신규 유저 → 임시 토큰과 함께 회원가입 2단계로

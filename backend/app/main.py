@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, face
+from app.routers import auth
 
 app = FastAPI(title="PoseFit API")
 
@@ -14,7 +14,6 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/api")
-app.include_router(face.router, prefix="/api")
 
 
 @app.get("/health")
