@@ -32,6 +32,7 @@ CREATE TABLE `social_accounts` (
 	`provider`		VARCHAR(20)		NOT NULL	COMMENT 'google',
 	`provider_uid`		VARCHAR(255)		NOT NULL	COMMENT '개인정보. 소셜 제공자 측 사용자 식별자.',
 	`provider_email`	VARCHAR(255)		NULL		COMMENT '개인정보. 소셜 제공자 이메일(없을 수 있음).',
+	`provider_avatar_url`	VARCHAR(512)		NULL		COMMENT '개인정보. 소셜 제공자 프로필 사진 URL(없을 수 있음, 로그인 시 갱신).',
 	`created_at`		DATETIME(6)		NOT NULL	DEFAULT CURRENT_TIMESTAMP(6),
 	`updated_at`		DATETIME(6)		NOT NULL	DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
 	PRIMARY KEY (`id`),

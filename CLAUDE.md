@@ -48,7 +48,7 @@ npm run build               # 프로덕션 빌드
 - **commit은 services에서만** — repositories는 조회/추가까지만 하고 `commit` 하지 않는다.
 - **models ≠ schemas** — models는 DB 테이블(SQLAlchemy), schemas는 API 입출력(Pydantic). 섞지 않는다.
 - 모든 router/service/repository 함수는 `async def`, DB 세션은 `Depends(get_db)`로 주입.
-- 라우터 등록은 `app/main.py`에서 `app.include_router(..., prefix="/api")`.
+- 라우터 등록은 `app/main.py`에서 `app.include_router(..., prefix="/api/v1")`. (`/api`=네임스페이스, `/v1`=API 버전. `docs/openapi.yaml`의 servers base path와 일치시킨다.)
 
 **현재 상태**: `models/`만 `docs/erd.sql` 기준으로 채워져 있고 `schemas/` `repositories/` `services/` `routers/`는 빈 패키지다. 기능 담당자가 도메인명으로 파일을 추가한다.
 
