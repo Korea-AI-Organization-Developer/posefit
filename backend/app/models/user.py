@@ -7,6 +7,7 @@ from sqlalchemy import (
     Date,
     Enum,
     ForeignKey,
+    Integer,
     Numeric,
     String,
     UniqueConstraint,
@@ -32,6 +33,12 @@ class User(Base, TimestampMixin):
         Enum(UserStatus), nullable=False, server_default=text("'active'"), comment="활성 | 탈퇴"
     )
     withdrawn_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6), nullable=True)
+    token_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default=text("0"),
+        comment="refresh 토큰 무효화용. 로그아웃 시 +1 → 이전에 발급된 refresh 토큰 전부 무효.",
+    )
 
     detail: Mapped["UserDetail"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
