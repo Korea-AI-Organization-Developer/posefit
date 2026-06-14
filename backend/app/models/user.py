@@ -73,6 +73,11 @@ class SocialAccount(Base, TimestampMixin):
     provider_email: Mapped[str | None] = mapped_column(
         String(255), nullable=True, comment="개인정보. 소셜 제공자 이메일(없을 수 있음)."
     )
+    provider_avatar_url: Mapped[str | None] = mapped_column(
+        String(512),
+        nullable=True,
+        comment="개인정보. 소셜 제공자 프로필 사진 URL(없을 수 있음, 로그인 시 갱신).",
+    )
 
     user: Mapped["User"] = relationship(back_populates="social_accounts")
 

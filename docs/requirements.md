@@ -72,13 +72,14 @@
 | SCR-08 | 운동 실행 화면 | 카메라 프리뷰, START / STOP 버튼, 실시간 자세 가이드 |
 | SCR-09 | 운동 결과 / 리포트 화면 | 녹화 영상 미리보기, 점수, AI 피드백, 저장/종료 버튼 |
 | SCR-10 | 보고 화면 (히스토리) | 저장한 영상 목록 및 일/주/월간·운동별 리포트 |
-| SCR-11 | 설정 | 계정 정보, 연결된 소셜 계정(구글), 얼굴 재등록, 로그아웃, 회원 탈퇴 |
+| SCR-11 | 설정 | 프로필(닉네임)·신체 정보 수정, 마케팅 수신 동의 변경, 연결된 소셜 계정(구글) 관리, 얼굴 재등록·삭제, 저장 영상 일괄 삭제, 로그아웃, 회원 탈퇴 |
 
 ---
 
 ## 4. 기능 요구사항
 
-기능은 6개 영역으로 분류한다: **인증(AUTH), 약관 동의(TERMS), 기본정보(PROFILE), 메인(MAIN), 운동(EX), 보고(REP)**.
+기능은 7개 영역으로 분류한다: **인증(AUTH), 약관 동의(TERMS), 기본정보(PROFILE), 메인(MAIN), 운동(EX), 보고(REP), 설정(SET)**.
+REST API 명세는 [openapi.yaml](openapi.yaml) (base path `/api/v1`)을 기준으로 한다.
 
 ### 4.1 인증 (AUTH)
 
@@ -115,10 +116,10 @@
 
 | ID | 기능명 | 상세 설명 | 우선순위 |
 | --- | --- | --- | --- |
-| PROFILE-01 | 이름 입력 | OAuth에서 받은 값으로 자동 입력하며 수정 가능. | 필수 |
-| PROFILE-02 | 생년월일 입력 | YYYY/MM/DD. 날짜 범위 유효성 검증. | 필수 |
-| PROFILE-03 | 성별 선택 | 남성 / 여성 / 선택 안 함. | 필수 |
-| PROFILE-04 | 신체 정보 입력 | 키(cm)·체중(kg). 운동 강도 및 칼로리 계산에 활용. 키 50~250cm, 체중 20~300kg 범위 제한. 추후 설정에서 수정 가능. | 필수 |
+| PROFILE-01 | 이름(닉네임) 입력 | OAuth(구글)에서 받은 이름이 기본값(`users.nickname`)으로 자동 입력되며 수정 가능 (최대 50자). | 필수 |
+| PROFILE-02 | 생년월일 입력 | YYYY-MM-DD (ISO 8601). 미래 날짜 등 범위 유효성 검증. 필수 입력. | 필수 |
+| PROFILE-03 | 성별 선택 | 남성(M) / 여성(F) / 선택 안 함(U). 필수 입력. | 필수 |
+| PROFILE-04 | 신체 정보 입력 | 키(cm)·체중(kg) — **선택 입력**(미입력 허용). 운동 강도 및 칼로리 계산에 활용. 키 50~250cm, 체중 20~300kg, 소수점 첫째 자리까지. 추후 설정에서 수정 가능(SET-02). | 필수 |
 
 ### 4.4 메인 / 대시보드 (MAIN)
 
@@ -145,7 +146,7 @@
 | EX-06 | 좌표 정규화 | 바운딩 박스 크기를 기준으로 키포인트 좌표를 정규화(0~1)하여, 카메라 거리·각도·해상도의 영향을 최소화한다. | 필수 |
 | EX-07 | 정답 영상과의 좌표 비교 | 정답 영상의 정규화된 좌표 시퀀스와 사용자의 좌표 시퀀스를 프레임 단위로 비교하여 차이(오차)를 계산한다. | 필수 |
 | EX-08 | STOP | 사용자가 STOP 버튼을 누르면 영상 캡처와 분석을 중단한다. | 필수 |
-| EX-09 | 운동 분석 및 점수 산출 | 수집된 좌표 비교 결과를 바탕으로 운동 점수(예: 100점 만점)를 산출한다. 점수 산정 기준은 별도 정의(평균 각도 오차, 동작 횟수, 자세 유지 시간 등). | 필수 |
+| EX-09 | 운동 분석 및 점수 산출 | 수집된 좌표 비교 결과를 바탕으로 운동 점수(0~100점, 소수점 둘째 자리까지)를 산출한다. 동적(dynamic) 운동은 반복 횟수(rep_count), 정적(static) 운동은 자세 유지 시간(hold_sec)을 함께 기록한다. 점수 산정 기준은 별도 정의(T-03). | 필수 |
 | EX-10 | 리포트(피드백) 생성 | LLM 또는 룰 기반으로 사용자에게 보여줄 자연어 피드백을 생성한다 (예: '무릎이 발끝보다 앞으로 나왔습니다'). | 필수 |
 | EX-11 | 운동 종료 | 사용자가 명시적으로 운동 종료를 선택할 때까지 결과 화면을 유지한다. | 필수 |
 | EX-12 | 영상 저장 | 사용자가 저장을 선택한 경우에만 운동 영상을 서버에 저장한다. 저장하지 않은 영상은 즉시 폐기. | 필수 |
@@ -161,12 +162,13 @@ START 버튼 클릭 후 STOP까지의 영상 처리 파이프라인은 다음 �
 6. **6단계:** 프레임별 오차 누적 → 최종 점수 및 피드백 생성
 
 #### 4.5.2 지원 운동 종목 (1차 시범 4종)
-- 런지
-- 플랭크
-- 푸쉬업
-- 오버헤드프레스
+- 런지 — dynamic (반복 횟수 기반)
+- 플랭크 — static (자세 유지 시간 기반)
+- 푸쉬업 — dynamic (반복 횟수 기반)
+- 오버헤드프레스 — dynamic (반복 횟수 기반)
 
 > ※ 1차는 위 4종으로 시범 출시한다. 정답 영상이 확보되는 종목 위주로 우선하고, 이후 추가한다.
+> ※ 운동 유형(`exercises.exercise_type`)에 따라 기록 지표가 다르다 — dynamic은 반복 횟수(rep_count), static은 유지 시간(hold_sec).
 
 ### 4.6 보고 / 히스토리 (REP)
 
@@ -179,6 +181,21 @@ START 버튼 클릭 후 STOP까지의 영상 처리 파이프라인은 다음 �
 | REP-05 | 월간 리포트 | 월 단위 운동 빈도 및 평균 점수, 가장 잘한 운동 등. | 필수 |
 | REP-06 | 총점 / 누적 통계 | 전체 기간의 누적 점수, 운동 횟수, 평균 점수. | 필수 |
 | REP-07 | 필터별 리포트 | 운동 종목별 필터링하여 위 리포트들을 조회. | 필수 |
+
+### 4.7 설정 (SET)
+
+설정 화면(SCR-11)에서 수행하는 계정·데이터 관리 기능.
+
+| ID | 기능명 | 상세 설명 | 우선순위 |
+| --- | --- | --- | --- |
+| SET-01 | 프로필(닉네임) 수정 | 닉네임 변경 (최대 50자). | 필수 |
+| SET-02 | 신체 정보 수정 | 생년월일·성별·키·체중 수정 (PROFILE 입력값의 사후 변경). | 필수 |
+| SET-03 | 마케팅 수신 동의 변경 | 동의 이력은 append-only로 보존하고 최신 레코드를 현재 상태로 적용한다. | 필수 |
+| SET-04 | 얼굴 재등록 | 기존 임베딩을 새 캡처로 교체. | 필수 |
+| SET-05 | 얼굴 데이터 삭제 | 계정은 유지한 채 얼굴 임베딩만 삭제. 삭제 후 재등록 전까지 운동 시작 불가. | 필수 |
+| SET-06 | 소셜 계정 연동 관리 | 구글 계정 추가 연동/해제. 마지막 남은 1개는 해제 불가(탈퇴로만 가능). | 선택 |
+| SET-07 | 저장 영상 일괄 삭제 | 저장(saved)된 모든 운동 영상을 일괄 삭제(비동기 처리). | 필수 |
+| SET-08 | 회원 탈퇴 | 계정을 탈퇴 상태(withdrawn)로 전환(soft delete)하고, 유예 기간 경과 후 영구 삭제. | 필수 |
 
 ---
 
@@ -193,7 +210,8 @@ START 버튼 클릭 후 STOP까지의 영상 처리 파이프라인은 다음 �
 - 얼굴 이미지 및 임베딩은 개인정보로 분류하여 암호화 저장한다.
 - 운동 영상은 사용자가 명시적으로 저장한 경우에만 서버에 보관하며, 그 외 영상은 즉시 폐기한다.
 - 소셜 로그인 전용으로 자체 비밀번호를 저장하지 않으며, OAuth 토큰 및 제공자 식별자(provider_user_id)만 안전하게 관리한다.
-- 회원 탈퇴 시 얼굴 데이터·영상·운동 기록을 일정 기간 내 모두 자동 삭제한다. 얼굴 데이터는 사용자가 설정에서 개별 삭제할 수 없으며, 회원 탈퇴를 통해서만 제거된다.
+- 얼굴 데이터(임베딩)는 설정에서 개별 삭제할 수 있다(SET-05). 삭제 시 재등록 전까지 운동 시작이 제한된다.
+- 회원 탈퇴 시 계정을 즉시 탈퇴 상태(status=withdrawn, withdrawn_at 기록)로 전환하고, 유예 기간 경과 후 얼굴 데이터·영상·운동 기록을 영구 삭제한다(배치).
 - 회원 탈퇴는 되돌릴 수 없는 동작이므로 확인 모달(삭제 항목 안내 + 동의 체크)을 거친 뒤 실행한다.
 
 ### 5.3 사용성
@@ -213,17 +231,24 @@ START 버튼 클릭 후 STOP까지의 영상 처리 파이프라인은 다음 �
 
 ## 6. 데이터 요구사항 (개요)
 
-MySQL 기반의 주요 엔티티는 다음과 같으며, SQLAlchemy ORM 모델로 매핑한다. 상세 스키마는 별도 ERD 문서에서 정의한다.
+MySQL 기반의 주요 엔티티는 다음과 같으며, SQLAlchemy ORM 모델로 매핑한다.
+**확정 스키마(DDL)는 [erd.sql](erd.sql)**, ORM 모델은 `backend/app/models/`, API 입출력 형식은 [openapi.yaml](openapi.yaml)을 기준으로 한다. 문서 간 충돌 시 erd.sql을 신뢰한다.
 
-| 엔티티 | 주요 필드 |
-| --- | --- |
-| User | `id, email, nickname, provider(google), provider_user_id, birth_date, gender, height_cm, weight_kg, face_embedding, created_at` |
-| Agreement | `id, user_id, tos_agreed, privacy_agreed, biometric_agreed, marketing_agreed, agreed_at` |
-| Exercise | `id, name, description, reference_video_url, reference_keypoints, difficulty` |
-| WorkoutSession | `id, user_id, exercise_id, started_at, ended_at, score, video_url(nullable), saved(bool)` |
-| KeypointFrame | `id, session_id, frame_index, keypoints(json), bbox` |
-| Feedback | `id, session_id, content(text), generated_by(rule/llm), created_at` |
-| Report | `id, user_id, period_type(daily/weekly/monthly), period_start, summary_json` |
+| 엔티티 (테이블) | 주요 필드 | 비고 |
+| --- | --- | --- |
+| User (`users`) | `id, nickname, role(user/admin), status(active/withdrawn), withdrawn_at` | 이메일 컬럼 없음 — 소셜 계정의 `provider_email`을 사용 |
+| UserDetail (`user_details`) | `user_id(PK), height, weight, birthdate, gender(M/F/U)` | users와 1:1. 생년월일·성별 필수, 키·체중 선택 |
+| SocialAccount (`social_accounts`) | `id, user_id, provider(google), provider_uid, provider_email, provider_avatar_url` | `(provider, provider_uid)` UNIQUE. 한 사용자에 복수 연동 가능. 프로필 사진 URL은 로그인 시 갱신 |
+| Agreement (`agreements`) | `id, user_id, tos_agreed, privacy_agreed, biometric_agreed, marketing_agreed, agreed_at` | append-only — 최신 1건이 현재 동의 상태 |
+| FaceEmbedding (`face_embeddings`) | `user_id(PK), embedding(VARBINARY), model_version, bin_file_url, registered_at` | users와 1:1. 임베딩은 API 응답에 노출 금지 |
+| Exercise (`exercises`) | `id, name_ko, name_en, description, reference_video_url, exercise_type(static/dynamic), is_active` | 정답 키포인트는 DB 미저장 — 전처리 산출물로 서빙(T-09) |
+| WorkoutSession (`workout_sessions`) | `id, user_id, exercise_id, status(in_progress/completed/aborted), started_at, ended_at, score(0~100, DECIMAL(5,2)), rep_count, hold_sec, saved, video_url(nullable)` | 얼굴 매칭 실패 등 비정상 종료도 `aborted` |
+| KeypointFrame (`keypoint_frames`) | `id, session_id, frame_index, timestamp_ms, keypoints(JSON), bbox(JSON, nullable)` | `(session_id, frame_index)` UNIQUE |
+| Feedback (`feedbacks`) | `id, session_id, content(text), severity(info/warning/critical), generated_by(rule/llm), created_at` | |
+| WorkoutDailyStat (`workout_daily_stats`) | `id, user_id, exercise_id, stat_date, session_count, total_duration_sec, avg_score, best_score` | `(user_id, exercise_id, stat_date)` UNIQUE. 일 단위 집계 |
+
+> ※ 별도 Report 테이블은 두지 않는다 — 일/주/월/누적 리포트는 `workout_daily_stats` 집계로 산출한다(Derived).
+> ※ 타임스탬프 공통 컬럼 `created_at`/`updated_at`(DATETIME(6))은 표에서 생략했다.
 
 ---
 
@@ -231,7 +256,7 @@ MySQL 기반의 주요 엔티티는 다음과 같으며, SQLAlchemy ORM 모델�
 
 ### 7.1 제약사항
 - 초기 버전은 단일 사용자 환경(웹캠 1대, 1인)에 한정한다.
-- 포즈 추정에 ViTPose-Base(서버 GPU)를 채택함에 따라, 프레임 처리는 **서버 추론** 방식으로 결정한다 (ViTPose-Base는 브라우저 실시간 실행이 비현실적). 웹캠 프레임을 서버로 스트리밍(WebSocket/WebRTC 등)하여 추론 후 결과를 회신한다.
+- 포즈 추정에 ViTPose-Base(서버 GPU)를 채택함에 따라, 프레임 처리는 **서버 추론** 방식으로 결정한다 (ViTPose-Base는 브라우저 실시간 실행이 비현실적). 웹캠 프레임을 서버로 스트리밍(WebSocket/WebRTC 등)하여 추론 후 결과를 회신한다. 단, API 명세([openapi.yaml](openapi.yaml))는 추후 클라이언트 추론 전환 가능성에 대비해 두 시나리오(A: 서버 추론, B: 클라이언트 추론)를 모두 수용하도록 설계되어 있다.
 - 정답 영상의 권리(저작권)는 자체 촬영 또는 라이선스 확보된 영상에 한정한다.
 
 ### 7.2 가정
@@ -255,3 +280,6 @@ MySQL 기반의 주요 엔티티는 다음과 같으며, SQLAlchemy ORM 모델�
 | T-06 | 운동 종목 1차 확정 | 1차 출시 시범 종목 4종 확정: 런지, 플랭크, 푸쉬업, 오버헤드프레스 → 확정 완료 |
 | T-07 | 리포트 시각화 방식 | 차트 라이브러리(Recharts, Chart.js 등) 및 그래프 종류 결정 필요. |
 | T-08 | 배포 환경 | 프론트·백엔드·DB 배포 인프라(AWS/GCP/자체 서버) 결정 필요. |
+| T-09 | 정답 키포인트 저장 방식 | `exercises` 테이블에 키포인트 컬럼 없음. 정답 영상 전처리 산출물을 오브젝트 스토리지/캐시로 서빙한다고 가정(API의 reference-keypoints). DB 저장 여부 확인 필요. |
+| T-10 | 운동 카드 썸네일 | `exercises`에 썸네일 컬럼 없음. 프론트 정적 자산 또는 정답 영상 포스터 프레임 사용을 가정. 컬럼 추가 여부 확인 필요. |
+| T-11 | 프레임 전송 프로토콜 | REST 배치 업로드(현 API 기준) vs WebSocket 스트리밍. 15 FPS 목표를 달성할 수 있는 방식으로 결정 필요. |
