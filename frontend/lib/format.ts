@@ -41,3 +41,22 @@ export function formatDateWithWeekday(date: string): string {
 export function formatScore(score: number): string {
   return String(Math.round(score));
 }
+
+/** 누적 운동 시간: 141 → "2분 21초", 3600 → "1시간", 4530 → "1시간 15분" */
+export function formatDuration(totalSec: number): string {
+  if (totalSec <= 0) return "0초";
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return m > 0 ? `${h}시간 ${m}분` : `${h}시간`;
+  if (m > 0) return s > 0 ? `${m}분 ${s}초` : `${m}분`;
+  return `${s}초`;
+}
+
+/** 저장 용량: 260046848 → "248 MB", 1610612736 → "1.5 GB" */
+export function formatBytes(bytes: number): string {
+  if (bytes <= 0) return "0 MB";
+  const mb = bytes / (1024 * 1024);
+  if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
+  return `${Math.round(mb)} MB`;
+}

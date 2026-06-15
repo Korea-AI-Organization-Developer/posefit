@@ -52,9 +52,8 @@ CREATE TABLE `agreements` (
 
 CREATE TABLE `face_embeddings` (
 	`user_id`		BIGINT			NOT NULL,
-	`embedding`		VARBINARY(2048)		NOT NULL	COMMENT '개인정보. 직렬화된 임베딩 벡터(가능하면 애플리케이션 단에서 암호화).',
+	`embedding`		VARBINARY(1024)		NOT NULL	COMMENT '개인정보. dlib 128차원 float64 직렬화 (1024 bytes).',
 	`model_version`		VARCHAR(50)		NOT NULL	COMMENT '임베딩 모델 버전. 동일 버전끼리만 비교 유효.',
-	`bin_file_url`		VARCHAR(255)		NULL		COMMENT '원본 임베딩/이미지 파일의 오브젝트 스토리지 URL(선택).',
 	`registered_at`		DATETIME(6)		NOT NULL	DEFAULT CURRENT_TIMESTAMP(6)	COMMENT '등록날짜',
 	PRIMARY KEY (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

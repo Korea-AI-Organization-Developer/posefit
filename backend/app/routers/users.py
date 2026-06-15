@@ -7,6 +7,7 @@ from app.models.user import User
 from app.schemas.user import (
     AgreementCreateRequest,
     AgreementRead,
+    FaceDetectResponse,
     FaceRegistrationResponse,
     UserDetailRead,
     UserDetailUpsertRequest,
@@ -72,6 +73,18 @@ async def upsert_my_detail(
 
 
 # ─── 얼굴 (가입 3단계 / 설정) ───
+@router.post("/face/detect", response_model=FaceDetectResponse)
+async def detect_face(
+    image: UploadFile = File(...),
+    _: User = Depends(get_current_user),
+):
+    """웹캠 프레임에 얼굴이 정확히 1개 있는지 빠르게 확인 — 임베딩 추출 없음."""
+    from ai.face.face_recognizer import count_faces
+
+    image_bytes = await image.read()
+    return FaceDetectResponse(detected=count_faces(image_bytes) == 1)
+
+
 @router.post(
     "/face", response_model=FaceRegistrationResponse, status_code=status.HTTP_201_CREATED
 )

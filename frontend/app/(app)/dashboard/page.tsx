@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { formatDateWithWeekday } from "@/lib/format";
+import { getMe } from "@/lib/api/users";
 import { getCalendar, getDashboard, MOCK_TODAY } from "@/lib/mock/dashboard";
 import { getExercises } from "@/lib/mock/exercises";
-import { getMe } from "@/lib/mock/user";
 import { ActivityHeatmap } from "./activity-heatmap";
 import { KpiCards } from "./kpi-cards";
 import { RecentSessions } from "./recent-sessions";
@@ -12,9 +12,8 @@ export const metadata: Metadata = { title: "대시보드" };
 
 /*
  * SCR-05 메인 대시보드 (MAIN-01~06).
- * 데이터는 목업 — 백엔드 구현 후 @/lib/mock/* 을 fetch 기반 @/lib/api/* 로
- * 교체한다 (함수 시그니처 동일):
- *   getMe()        → GET /api/v1/users/me
+ * getMe()는 실제 API(@/lib/api/users). 나머지는 백엔드 미구현이라 목업 —
+ * 구현 후 @/lib/mock/* 을 fetch 기반 @/lib/api/* 로 교체한다 (시그니처 동일):
  *   getDashboard() → GET /api/v1/users/me/dashboard
  *   getCalendar()  → GET /api/v1/reports/calendar?days=30
  *   getExercises() → GET /api/v1/exercises
