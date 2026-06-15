@@ -41,7 +41,14 @@ cp .env.example .env
 cp backend/.env.example backend/.env
 ```
 
-`.env`, `backend/.env` 파일을 열어 값을 채운다.
+각 `.env` 파일을 열어 주석을 읽고 값을 채운다. 아래 항목만 주의한다.
+
+- **`DATABASE_URL`** — 루트 `.env`에 설정한 `MYSQL_USER` / `MYSQL_PASSWORD` / `MYSQL_DATABASE`와 일치해야 한다.
+- **`JWT_SECRET_KEY`** — 외부에서 받는 값이 아니다. 아래 명령으로 직접 생성해서 붙여넣는다.
+  ```bash
+  openssl rand -hex 32
+  ```
+- **`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`** — Google Cloud Console에서 발급. 소셜 로그인을 쓰지 않는다면 비워둬도 서버는 기동된다.
 
 ### 3. Docker MySQL 실행
 
