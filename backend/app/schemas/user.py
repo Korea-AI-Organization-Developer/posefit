@@ -80,6 +80,10 @@ class SocialAccountRead(CamelModel):
 
 
 # ─── Face ──────────────────────────────────────────────────────────────────
+class FaceDetectResponse(CamelModel):
+    detected: bool
+
+
 class FaceRegistrationResponse(CamelModel):
     registered_at: datetime
     model_version: str

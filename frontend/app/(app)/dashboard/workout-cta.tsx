@@ -38,14 +38,13 @@ export function WorkoutCta({ exercises }: { exercises: ExerciseSummary[] }) {
         </Link>
       </div>
 
-      {/* 종목 상세 라우트(/workout/[id]) 확정 시 href 교체 */}
       <ul className="mt-6 grid flex-1 auto-rows-fr grid-cols-2 gap-3">
         {exercises.map((exercise) => {
           const src = exercise.nameEn ? EXERCISE_IMAGE[exercise.nameEn] : undefined;
           return (
             <li key={exercise.id} className="flex">
               <Link
-                href="/workout"
+                href={`/workout/${exercise.id}`}
                 className="flex flex-1 flex-col rounded-sm border border-border p-4 transition-colors duration-150 ease-out hover:border-border-strong hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
               >
                 {/* 픽토그램이 타일의 남는 높이를 채운다 */}

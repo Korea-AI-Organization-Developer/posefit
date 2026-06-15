@@ -34,6 +34,7 @@
 # SCR-03 기본정보 입력 (신규 가입)
 #   생년월일·성별·키·체중 입력          → PUT  /users/me/detail
 # SCR-04 얼굴 캡처 (신규 가입)
+#   실시간 얼굴 감지 폴링 (1.5s 간격)   → POST /users/me/face/detect
 #   정면 얼굴 등록                      → POST /users/me/face
 #
 # SCR-05 메인 대시보드
@@ -556,7 +557,7 @@ paths:
                 $ref: '#/components/schemas/FaceRegistrationResponse'
               example:
                 registeredAt: "2026-05-26T09:13:10Z"
-                modelVersion: "facevec-2026.04"
+                modelVersion: "dlib-v1"
         '401':
           $ref: '#/components/responses/Unauthorized'
         '409':
@@ -582,7 +583,7 @@ paths:
                 $ref: '#/components/schemas/FaceRegistrationResponse'
               example:
                 registeredAt: "2026-05-26T09:30:00Z"
-                modelVersion: "facevec-2026.04"
+                modelVersion: "dlib-v1"
         '401':
           $ref: '#/components/responses/Unauthorized'
         '422':
@@ -594,6 +595,37 @@ paths:
       description: 삭제 후 운동 endpoint 호출 시 422 FACE_REQUIRED.
       responses:
         '204': { description: 삭제 완료 }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /users/me/face/detect:
+    post:
+      tags: [Users]
+      operationId: detectFace
+      summary: 웹캠 프레임에 얼굴 1개 있는지 감지 (가입 SCR-04 실시간 피드백)
+      description: |
+        임베딩 추출 없이 얼굴 위치(HOG 검출)만 확인하므로 빠름 (~100ms).
+        클라이언트가 1.5초 간격으로 폴링해 타원 오버레이 색상(빨강↔초록)을 갱신.
+        인증 필요 — 미로그인 상태에서는 401.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FaceRegistrationForm'
+      responses:
+        '200':
+          description: 감지 결과
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FaceDetectResponse'
+              examples:
+                detected:
+                  summary: 얼굴 1개 감지됨
+                  value: { detected: true }
+                not_detected:
+                  summary: 얼굴 없음 또는 2명 이상
+                  value: { detected: false }
         '401':
           $ref: '#/components/responses/Unauthorized'
   /users/me/social-accounts:
@@ -1858,6 +1890,16 @@ components:
         image:
           type: string
           format: binary
+
+    FaceDetectResponse:
+      type: object
+      description: |
+        얼굴 감지 결과. `detected=true` 면 프레임에 얼굴이 정확히 1개 있음.
+        얼굴이 없거나 2명 이상이면 `detected=false`.
+      required: [detected]
+      properties:
+        detected:
+          type: boolean
 
     FaceRegistrationResponse:
       type: object

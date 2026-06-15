@@ -1,9 +1,9 @@
-import hashlib
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai.face.face_recognizer import MODEL_VERSION, encoding_to_bytes, extract_encoding
 from app.models.enums import UserStatus
 from app.models.user import User
 from app.repositories.user import UserRepository
@@ -16,11 +16,6 @@ from app.schemas.user import (
     UserDetailUpsertRequest,
     UserRead,
 )
-
-# 스텁 얼굴 임베딩 — 실제 Facenet512 추론은 추후 backend/ai/face/ 에서 연결한다.
-# 지금은 업로드 이미지의 SHA-256 다이제스트를 placeholder 임베딩으로 저장해
-# 가입 흐름(registrationStep complete)만 끝까지 동작시킨다.
-FACE_STUB_MODEL_VERSION = "stub-v0"
 
 
 class UserService:
@@ -142,9 +137,20 @@ class UserService:
             await self.repo.delete_face(existing)
             await self.db.flush()
 
-        embedding = hashlib.sha256(image_bytes).digest()  # 스텁 임베딩
+        try:
+            encoding = extract_encoding(image_bytes)
+        except ValueError as e:
+            code = str(e)
+            detail = (
+                "프레임에서 얼굴을 찾을 수 없습니다. 타원 안에 얼굴을 맞춰 주세요."
+                if code == "FACE_NOT_DETECTED"
+                else "얼굴이 두 명 이상 감지됐습니다. 혼자 촬영해 주세요."
+            )
+            raise HTTPException(status_code=422, detail=detail)
+
+        embedding = encoding_to_bytes(encoding)
         face = await self.repo.create_face(
-            user_id, embedding, FACE_STUB_MODEL_VERSION
+            user_id, embedding, MODEL_VERSION
         )
         await self.db.commit()
         await self.db.refresh(face)

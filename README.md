@@ -23,6 +23,10 @@ AI 기반 운동 자세 분석 및 피드백 웹 서비스
 - Node.js 18 이상
 - Docker Desktop
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) 설치
+- **dlib 빌드 도구** — 얼굴 인식 라이브러리(dlib) 빌드에 필요. `uv sync` 전에 설치한다.
+  - macOS: `brew install cmake` (Xcode Command Line Tools는 대부분 이미 설치됨)
+  - Windows: [cmake](https://cmake.org/download/) + [Visual Studio Build Tools](https://visualstudio.microsoft.com/ko/downloads/) C++ 워크로드
+  - Linux: `sudo apt install cmake build-essential libopenblas-dev liblapack-dev`
 
 ### 1. 저장소 클론
 
@@ -48,7 +52,7 @@ cp backend/.env.example backend/.env
   ```bash
   openssl rand -hex 32
   ```
-- **`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`** — Google Cloud Console에서 발급. 소셜 로그인을 쓰지 않는다면 비워둬도 서버는 기동된다.
+- **`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`** — Google Cloud Console에서 발급.
 
 ### 3. Docker MySQL 실행
 
@@ -60,7 +64,7 @@ docker compose up -d
 
 ```bash
 cd backend
-uv sync
+uv sync        # dlib 컴파일 포함 — cmake가 없으면 실패하므로 사전 준비 항목 확인
 uv run alembic upgrade head
 ```
 
@@ -94,8 +98,11 @@ uv run uvicorn app.main:app --reload
 
 ```bash
 cd frontend
+cp .env.example .env   # NEXT_PUBLIC_GOOGLE_CLIENT_ID 를 채운다(구글 로그인용)
 npm install
 npm run dev
 ```
+
+`.env.local` — `NEXT_PUBLIC_API_BASE_URL`(기본값 그대로면 OK)과 `NEXT_PUBLIC_GOOGLE_CLIENT_ID`(`backend/.env`의 `GOOGLE_CLIENT_ID`와 동일 값)를 설정한다. 구글 로그인을 쓰지 않으면 비워둬도 화면은 뜬다.
 
 → `http://localhost:3000`
