@@ -1,5 +1,6 @@
-import Link from "next/link";
-import { LockKeyhole, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
+
+import { LoginForm } from "./login-form";
 
 export const metadata = { title: "로그인" };
 
@@ -19,39 +20,7 @@ export default function AdminLoginPage() {
           </p>
         </div>
 
-        <form className="rounded-md border border-border bg-surface p-6 shadow-xs">
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium">이메일</span>
-            <input
-              type="email"
-              placeholder="admin@posefit.dev"
-              className="h-10 w-full rounded-sm border border-border bg-surface px-3 text-sm outline-none transition-colors placeholder:text-text-subtle focus:border-accent focus:ring-2 focus:ring-accent-soft"
-            />
-          </label>
-
-          <label className="mt-4 block">
-            <span className="mb-1.5 block text-sm font-medium">비밀번호</span>
-            <input
-              type="password"
-              placeholder="비밀번호"
-              className="h-10 w-full rounded-sm border border-border bg-surface px-3 text-sm outline-none transition-colors placeholder:text-text-subtle focus:border-accent focus:ring-2 focus:ring-accent-soft"
-            />
-          </label>
-
-          <button
-            type="button"
-            className="mt-6 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-accent text-sm font-medium text-white hover:bg-accent-hover"
-          >
-            <LockKeyhole className="size-4" aria-hidden />
-            로그인
-          </button>
-        </form>
-
-        <div className="mt-4 text-center">
-          <Link href="/" className="text-sm text-text-muted hover:text-text">
-            대시보드 미리보기
-          </Link>
-        </div>
+        <LoginForm />
       </section>
     </main>
   );
