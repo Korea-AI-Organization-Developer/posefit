@@ -3,6 +3,7 @@
 모든 모델을 여기서 import 하여 Base.metadata 에 등록한다 (Alembic autogenerate 용).
 """
 
+from app.models.admin import AdminAccount, AdminAuditLog, LlmModel
 from app.models.exercise import Exercise
 from app.models.user import (
     Agreement,
@@ -29,4 +30,7 @@ __all__ = [
     "KeypointFrame",
     "Feedback",
     "WorkoutDailyStat",
+    "AdminAccount",
+    "LlmModel",
+    "AdminAuditLog",
 ]

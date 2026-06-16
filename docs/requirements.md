@@ -52,7 +52,7 @@
 | --- | --- |
 | 비회원 | 랜딩/소개 페이지 열람만 가능. 운동 분석 기능 사용 불가. |
 | 회원 (일반 사용자) | 회원가입(약관 동의·기본정보 입력·얼굴 캡처 포함), 로그인, 운동 수행, 영상 저장, 본인 리포트 조회. |
-| 관리자 (운영자) | 운동 종목 추가/수정, 정답 영상 등록, 회원 관리, 시스템 모니터링. (Phase 2) |
+| 관리자 (운영자) | 회원 관리, 운동 종목 추가/수정·정답 영상 등록, RAG LLM 모델 교체, 운동 좌표 데이터 내보내기, 운영 통계 모니터링. **소비자 서비스와 분리된 별도 도메인(admin)·전용 이메일/비밀번호 인증**(소셜 로그인 아님). 모든 변경 행위는 감사 로그로 기록. (4.8 ADM 참고) |
 
 ---
 
@@ -199,6 +199,25 @@ START 버튼 클릭 후 STOP까지의 영상 처리 파이프라인은 다음 �
 
 ---
 
+### 4.8 관리자 / 운영 (ADM)
+
+운영자가 사용하는 **별도 도메인(admin) 관리자 페이지** 기능. 소비자 서비스와 인증·도메인이 분리된다.
+인증은 전용 이메일/비밀번호(`admin_accounts`, passlib bcrypt)이며, 소비자 Google 로그인 토큰과 JWT type이 분리되어 상호 사용할 수 없다. `super_admin`만 관리자 계정·감사 로그를 다룰 수 있다.
+
+| ID | 기능명 | 상세 설명 | 우선순위 |
+| --- | --- | --- | --- |
+| ADM-01 | 관리자 로그인 | 이메일/비밀번호 로그인. access 15분 / refresh 14일, 로그아웃 시 `token_version`+1로 일괄 무효화. 최초 계정은 CLI 스크립트로 생성. | 필수 |
+| ADM-02 | 회원 관리 | 회원 목록(검색·상태 필터·페이지네이션)·상세(프로필·약관·세션 수·얼굴 등록 여부) 조회, 상태 변경(활성/정지/탈퇴). 정지(`suspended`)는 로그인·이용을 차단한다. | 필수 |
+| ADM-03 | 운동 종목 관리 | 운동 종목 등록·수정, 노출 여부(`is_active`) 토글, 정답 영상 URL 관리. | 필수 |
+| ADM-04 | 운동 좌표 내보내기 | `keypoint_frames`를 세션/사용자/기간 필터로 JSONL·JSON 내보내기(StreamingResponse). 분석 모델 개선용 학습 데이터셋 구축 목적. | 필수 |
+| ADM-05 | RAG LLM 모델 교체 | 피드백 생성용 LLM 모델 레지스트리(`llm_models`)에서 활성 모델을 런타임에 교체(예: gemini 3.1 flash → 3.5 flash). 정확히 1개만 활성, RAG 서비스가 활성 모델을 읽는다. 재배포 불필요. | 필수 |
+| ADM-06 | 운영 통계 | 회원 수·세션 수·평균 점수 요약과 일별 가입·세션 추이. | 필수 |
+| ADM-07 | 감사 로그 | 관리자의 모든 변경·내보내기 행위를 `admin_audit_logs`에 기록(누가/언제/무엇을/IP). PII·좌표 데이터 처리 책임성 확보. (super_admin 조회) | 필수 |
+
+> 도메인 분리: 관리자 프론트는 별도 Next.js 앱(`admin/`)으로 구성하고 `admin.posefit.com` 등 별도 도메인에 배포한다.
+
+---
+
 ## 5. 비기능 요구사항
 
 ### 5.1 성능
@@ -246,6 +265,9 @@ MySQL 기반의 주요 엔티티는 다음과 같으며, SQLAlchemy ORM 모델�
 | KeypointFrame (`keypoint_frames`) | `id, session_id, frame_index, timestamp_ms, keypoints(JSON), bbox(JSON, nullable)` | `(session_id, frame_index)` UNIQUE |
 | Feedback (`feedbacks`) | `id, session_id, content(text), severity(info/warning/critical), generated_by(rule/llm), created_at` | |
 | WorkoutDailyStat (`workout_daily_stats`) | `id, user_id, exercise_id, stat_date, session_count, total_duration_sec, avg_score, best_score` | `(user_id, exercise_id, stat_date)` UNIQUE. 일 단위 집계 |
+| AdminAccount (`admin_accounts`) | `id, email(UNIQUE), password_hash, name, role(super_admin/admin), status(active/disabled), token_version, last_login_at` | 관리자 전용 자격증명. 소비자 `users`와 분리(4.8 ADM) |
+| LlmModel (`llm_models`) | `id, provider(google/openai/anthropic), model_name, display_name, params(JSON), is_active` | RAG 피드백 LLM 레지스트리. `is_active=true`는 정확히 1행(활성 모델) |
+| AdminAuditLog (`admin_audit_logs`) | `id, admin_id, action, target_type, target_id, detail(JSON), ip_address, created_at` | 관리자 행위 감사 로그. append-only |
 
 > ※ 별도 Report 테이블은 두지 않는다 — 일/주/월/누적 리포트는 `workout_daily_stats` 집계로 산출한다(Derived).
 > ※ 타임스탬프 공통 컬럼 `created_at`/`updated_at`(DATETIME(6))은 표에서 생략했다.
@@ -273,7 +295,7 @@ MySQL 기반의 주요 엔티티는 다음과 같으며, SQLAlchemy ORM 모델�
 | ID | 항목 | 내용 |
 | --- | --- | --- |
 | T-01 | 비전 모델 선정 | 포즈 추정 = **ViTPose-Base 확정**(서버 GPU 추론 전제). 객체 추적(OpenCV CSRT / YOLO+ByteTracker / OSTrack / SAM2)은 정확도·속도 벤치마크 후 선정 예정. |
-| T-02 | LLM 모델 선정 | 피드백 생성에 사용할 LLM 모델 및 비용·지연 검토 필요. |
+| T-02 | LLM 모델 선정 | 피드백 생성에 사용할 LLM 모델 및 비용·지연 검토 필요. 모델 자체는 미정이나, **런타임 교체 인프라는 확정**(`llm_models` 레지스트리 + 관리자 활성 교체, ADM-05) — 코드 수정·재배포 없이 모델 전환 가능. |
 | T-03 | 점수 산정 알고리즘 | 관절 각도, 동작 횟수, 자세 유지 시간 등 어느 요소를 어떤 가중치로 반영할지 결정 필요. |
 | T-04 | 정답 영상 확보 방법 | 자체 촬영 vs 외부 라이선스 vs 트레이너 협업 등 결정 필요. |
 | T-05 | 얼굴 데이터 보관 정책 | **확정** — 임베딩 벡터만 저장, 원본 이미지는 추출 후 즉시 폐기. `face_embeddings` 테이블에 `bin_file_url` 컬럼 없음. |

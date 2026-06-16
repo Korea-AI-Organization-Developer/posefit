@@ -227,6 +227,22 @@ tags:
     description: 세션 피드백 조회 (SCR-09).
   - name: Reports
     description: 일/주/월/누적 통계·차트·캘린더 (SCR-05 일부, SCR-10).
+  - name: Admin Auth
+    description: |
+      관리자 전용 로그인(이메일/비밀번호)·토큰 갱신·로그아웃. 소비자 Google 로그인과 분리.
+      adminBearerAuth 토큰 사용. 별도 도메인(admin.posefit.com 등)에서 호출.
+  - name: Admin Users
+    description: 회원 목록·상세·상태(활성/정지/탈퇴) 변경 (운영 도구, Phase 2).
+  - name: Admin Exercises
+    description: 운동 종목 등록·수정·노출 토글·정답 영상 URL 관리 (운영 도구, Phase 2).
+  - name: Admin LLM
+    description: RAG 피드백 생성용 LLM 모델 레지스트리 및 활성 모델 교체 (운영 도구).
+  - name: Admin Exports
+    description: 운동 좌표(keypoint_frames) 내보내기 — 분석 모델 학습 데이터셋 구축용.
+  - name: Admin Stats
+    description: 운영 대시보드 집계(회원·세션·점수·추이).
+  - name: Admin Audit
+    description: 관리자 행위 감사 로그 조회 (super_admin).
 
 paths:
 
@@ -1387,6 +1403,426 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
+
+  # ===========================================================================
+  # Admin (운영) — 별도 도메인, adminBearerAuth 로 보호. 로직은 팀 구현 예정.
+  # ===========================================================================
+  /admin/auth/login:
+    post:
+      tags: [Admin Auth]
+      summary: 관리자 로그인 (이메일/비밀번호)
+      security: []  # 로그인 자체는 토큰 불필요
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminLoginRequest'
+      responses:
+        '200':
+          description: 로그인 성공 — 관리자 access/refresh 토큰 발급.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTokenResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /admin/auth/refresh:
+    post:
+      tags: [Admin Auth]
+      summary: 관리자 access 토큰 갱신
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminRefreshRequest'
+      responses:
+        '200':
+          description: 새 access 토큰.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRefreshResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/auth/logout:
+    post:
+      tags: [Admin Auth]
+      summary: 관리자 로그아웃 (token_version +1 로 refresh 일괄 무효화)
+      security:
+        - adminBearerAuth: []
+      responses:
+        '204':
+          description: 로그아웃 완료.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/me:
+    get:
+      tags: [Admin Auth]
+      summary: 현재 로그인한 관리자 정보
+      security:
+        - adminBearerAuth: []
+      responses:
+        '200':
+          description: 관리자 정보.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Admin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/users:
+    get:
+      tags: [Admin Users]
+      summary: 회원 목록 (검색·상태 필터·페이지네이션)
+      security:
+        - adminBearerAuth: []
+      parameters:
+        - name: query
+          in: query
+          required: false
+          schema: { type: string }
+          description: 닉네임 또는 대표 이메일 부분 일치.
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, suspended, withdrawn]
+        - { $ref: '#/components/parameters/AdminPage' }
+        - { $ref: '#/components/parameters/AdminSize' }
+      responses:
+        '200':
+          description: 회원 페이지.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/users/{id}:
+    parameters:
+      - { $ref: '#/components/parameters/AdminUserId' }
+    get:
+      tags: [Admin Users]
+      summary: 회원 상세 (프로필·약관·세션 수·얼굴 등록 여부)
+      security:
+        - adminBearerAuth: []
+      responses:
+        '200':
+          description: 회원 상세.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Admin Users]
+      summary: 회원 상태 변경 (활성/정지/탈퇴) — 감사 로그 기록
+      security:
+        - adminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUserUpdateRequest'
+      responses:
+        '200':
+          description: 변경된 회원 상세.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/exercises:
+    get:
+      tags: [Admin Exercises]
+      summary: 운동 종목 전체 (비활성 포함)
+      security:
+        - adminBearerAuth: []
+      responses:
+        '200':
+          description: 종목 목록.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminExercise'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Admin Exercises]
+      summary: 운동 종목 등록 — 감사 로그 기록
+      security:
+        - adminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminExerciseCreateRequest'
+      responses:
+        '201':
+          description: 생성된 종목.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminExercise'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /admin/exercises/{id}:
+    parameters:
+      - { $ref: '#/components/parameters/ExerciseId' }
+    patch:
+      tags: [Admin Exercises]
+      summary: 운동 종목 수정 (부분 갱신·is_active 토글) — 감사 로그 기록
+      security:
+        - adminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminExerciseUpdateRequest'
+      responses:
+        '200':
+          description: 수정된 종목.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminExercise'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/llm/models:
+    get:
+      tags: [Admin LLM]
+      summary: LLM 모델 레지스트리 (활성 표시 포함)
+      security:
+        - adminBearerAuth: []
+      responses:
+        '200':
+          description: 모델 목록.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LlmModel'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Admin LLM]
+      summary: LLM 모델 등록
+      security:
+        - adminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LlmModelCreateRequest'
+      responses:
+        '201':
+          description: 등록된 모델.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmModel'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /admin/llm/models/{id}:activate:
+    parameters:
+      - { $ref: '#/components/parameters/LlmModelId' }
+    post:
+      tags: [Admin LLM]
+      summary: 활성 LLM 모델 교체 (대상 활성화·나머지 비활성화) — 감사 로그 기록
+      description: |
+        gemini 3.1 flash → 3.5 flash 처럼 재배포 없이 런타임에 RAG 모델을 교체한다.
+        단일 트랜잭션으로 대상만 is_active=true, 나머지 false 로 만든다.
+      security:
+        - adminBearerAuth: []
+      responses:
+        '200':
+          description: 활성화된 모델.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmModel'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/workout-sessions:
+    get:
+      tags: [Admin Exports]
+      summary: 운동 세션 탐색 (내보낼 세션 필터·페이지네이션)
+      security:
+        - adminBearerAuth: []
+      parameters:
+        - name: userId
+          in: query
+          schema: { type: integer, format: int64 }
+        - name: exerciseId
+          in: query
+          schema: { type: integer, format: int64 }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - { $ref: '#/components/parameters/AdminPage' }
+        - { $ref: '#/components/parameters/AdminSize' }
+      responses:
+        '200':
+          description: 세션 페이지.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSessionPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/exports/keypoints:
+    get:
+      tags: [Admin Exports]
+      summary: 운동 좌표(keypoint_frames) 내보내기 (JSONL/JSON) — 감사 로그 기록
+      description: |
+        분석 모델 학습 데이터셋 구축용. sessionId 단건 또는 userId/exerciseId/기간 필터로 대량 내보내기.
+        - format=jsonl: 프레임 1건 = 1줄(세션 메타 포함). 여러 세션 일괄.
+        - format=json : 단일 sessionId 의 {session, frames[]} 구조.
+        대량일 수 있어 StreamingResponse 로 전송한다.
+      security:
+        - adminBearerAuth: []
+      parameters:
+        - name: sessionId
+          in: query
+          schema: { type: integer, format: int64 }
+          description: 단건 내보내기. 지정 시 다른 필터는 무시.
+        - name: userId
+          in: query
+          schema: { type: integer, format: int64 }
+        - name: exerciseId
+          in: query
+          schema: { type: integer, format: int64 }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [jsonl, json]
+            default: jsonl
+      responses:
+        '200':
+          description: 스트리밍 좌표 데이터(파일 다운로드).
+          content:
+            application/x-ndjson:
+              schema: { type: string }
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeypointExport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/stats/overview:
+    get:
+      tags: [Admin Stats]
+      summary: 운영 대시보드 요약(회원·세션·평균 점수)
+      security:
+        - adminBearerAuth: []
+      responses:
+        '200':
+          description: 요약 지표.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsOverview'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/stats/timeseries:
+    get:
+      tags: [Admin Stats]
+      summary: 일별 가입·세션 추이
+      security:
+        - adminBearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: 일별 추이 포인트.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsTimeseries'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/audit-logs:
+    get:
+      tags: [Admin Audit]
+      summary: 관리자 감사 로그 (super_admin)
+      security:
+        - adminBearerAuth: []
+      parameters:
+        - { $ref: '#/components/parameters/AdminPage' }
+        - { $ref: '#/components/parameters/AdminSize' }
+      responses:
+        '200':
+          description: 감사 로그 페이지.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
 components:
 
   # ===========================================================================
@@ -1400,6 +1836,14 @@ components:
       description: |
         Authorization: Bearer <accessToken>.
         access 15분, refresh 14일 (refresh는 별도 endpoint).
+    adminBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        관리자 Authorization: Bearer <adminAccessToken>.
+        소비자 토큰과 JWT type(admin_access/admin_refresh)이 분리되어 상호 사용 불가.
+        /admin/* 는 모두 이 스킴으로 보호된다.
 
   # ===========================================================================
   # Reusable parameters
@@ -1465,6 +1909,30 @@ components:
         24시간 내 동일 키로 재요청 시 같은 응답 반환.
         부작용 있는 POST 전반에 권장.
       example: "f0e1d2c3-b4a5-6789-0abc-def012345678"
+
+    # ─── Admin (오프셋 페이지네이션 — 운영 도구용) ───
+    AdminPage:
+      name: page
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, default: 1 }
+    AdminSize:
+      name: size
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    AdminUserId:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+      description: users.id (BIGINT).
+    LlmModelId:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+      description: llm_models.id (BIGINT).
 
   # ===========================================================================
   # Reusable responses (모든 4xx/5xx 는 $ref — 중복 정의 금지)
@@ -2392,6 +2860,259 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ScoreTrendSeries'
+
+    # =========================================================================
+    # Admin schemas (운영 도구) — 응답 필드는 admin_accounts/llm_models/
+    # admin_audit_logs (= erd.sql) 컬럼과 정렬, 예외는 Derived 표시.
+    # =========================================================================
+    Admin:
+      type: object
+      required: [id, email, name, role, status, createdAt]
+      properties:
+        id: { type: integer, format: int64 }
+        email: { type: string, format: email }
+        name: { type: string }
+        role: { type: string, enum: [super_admin, admin] }
+        status: { type: string, enum: [active, disabled] }
+        lastLoginAt: { type: ["string", "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    AdminLoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+
+    AdminTokenResponse:
+      type: object
+      required: [accessToken, refreshToken, accessTokenExpiresIn, admin]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        accessTokenExpiresIn: { type: integer, description: access 만료까지 초 }
+        admin: { $ref: '#/components/schemas/Admin' }
+
+    AdminRefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+
+    AdminRefreshResponse:
+      type: object
+      required: [accessToken, accessTokenExpiresIn]
+      properties:
+        accessToken: { type: string }
+        accessTokenExpiresIn: { type: integer }
+
+    AdminPageMeta:
+      type: object
+      description: 오프셋 페이지네이션 공통 메타.
+      required: [total, page, size]
+      properties:
+        total: { type: integer }
+        page: { type: integer }
+        size: { type: integer }
+
+    AdminUserListItem:
+      type: object
+      required: [id, nickname, role, status, createdAt]
+      properties:
+        id: { type: integer, format: int64 }
+        nickname: { type: string }
+        email: { type: ["string", "null"], description: "Derived. 대표 social_accounts.provider_email" }
+        role: { type: string, enum: [user, admin] }
+        status: { type: string, enum: [active, suspended, withdrawn] }
+        createdAt: { type: string, format: date-time }
+
+    AdminUserPage:
+      allOf:
+        - $ref: '#/components/schemas/AdminPageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/AdminUserListItem' }
+
+    AdminUserDetail:
+      type: object
+      required: [id, nickname, role, status, createdAt, faceRegistered, sessionCount]
+      properties:
+        id: { type: integer, format: int64 }
+        nickname: { type: string }
+        email: { type: ["string", "null"] }
+        role: { type: string, enum: [user, admin] }
+        status: { type: string, enum: [active, suspended, withdrawn] }
+        createdAt: { type: string, format: date-time }
+        withdrawnAt: { type: ["string", "null"], format: date-time }
+        birthdate: { type: ["string", "null"], format: date }
+        gender: { type: ["string", "null"], enum: [M, F, U, null] }
+        height: { type: ["number", "null"] }
+        weight: { type: ["number", "null"] }
+        faceRegistered: { type: boolean, description: "Derived. face_embeddings row 존재" }
+        marketingAgreed: { type: ["boolean", "null"], description: "Derived. 최신 agreements.marketing_agreed" }
+        sessionCount: { type: integer, description: "Derived. workout_sessions count" }
+
+    AdminUserUpdateRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [active, suspended, withdrawn] }
+
+    AdminExercise:
+      type: object
+      required: [id, nameKo, exerciseType, isActive]
+      properties:
+        id: { type: integer, format: int64 }
+        nameKo: { type: string }
+        nameEn: { type: ["string", "null"] }
+        description: { type: ["string", "null"] }
+        referenceVideoUrl: { type: ["string", "null"] }
+        exerciseType: { type: string, enum: [static, dynamic] }
+        isActive: { type: boolean }
+
+    AdminExerciseCreateRequest:
+      type: object
+      required: [nameKo]
+      properties:
+        nameKo: { type: string, maxLength: 100 }
+        nameEn: { type: ["string", "null"], maxLength: 100 }
+        description: { type: ["string", "null"] }
+        referenceVideoUrl: { type: ["string", "null"], maxLength: 500 }
+        exerciseType: { type: string, enum: [static, dynamic], default: dynamic }
+
+    AdminExerciseUpdateRequest:
+      type: object
+      description: 부분 갱신 — 전달된 필드만 수정.
+      properties:
+        nameKo: { type: string, maxLength: 100 }
+        nameEn: { type: ["string", "null"], maxLength: 100 }
+        description: { type: ["string", "null"] }
+        referenceVideoUrl: { type: ["string", "null"], maxLength: 500 }
+        exerciseType: { type: string, enum: [static, dynamic] }
+        isActive: { type: boolean }
+
+    LlmModel:
+      type: object
+      required: [id, provider, modelName, displayName, isActive, createdAt, updatedAt]
+      properties:
+        id: { type: integer, format: int64 }
+        provider: { type: string, enum: [google, openai, anthropic] }
+        modelName: { type: string, description: "API 식별자. 예: gemini-3.5-flash" }
+        displayName: { type: string }
+        params: { type: ["object", "null"], additionalProperties: true }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    LlmModelCreateRequest:
+      type: object
+      required: [provider, modelName, displayName]
+      properties:
+        provider: { type: string, enum: [google, openai, anthropic] }
+        modelName: { type: string, maxLength: 100 }
+        displayName: { type: string, maxLength: 100 }
+        params: { type: ["object", "null"], additionalProperties: true }
+
+    AdminSessionListItem:
+      type: object
+      required: [id, userId, exercise, status, startedAt, saved]
+      properties:
+        id: { type: integer, format: int64 }
+        userId: { type: integer, format: int64 }
+        exercise: { $ref: '#/components/schemas/EmbeddedExercise' }
+        status: { type: string, enum: [in_progress, completed, aborted] }
+        startedAt: { type: string, format: date-time }
+        endedAt: { type: ["string", "null"], format: date-time }
+        score: { type: ["number", "null"] }
+        repCount: { type: ["integer", "null"] }
+        holdSec: { type: ["integer", "null"] }
+        saved: { type: boolean }
+
+    AdminSessionPage:
+      allOf:
+        - $ref: '#/components/schemas/AdminPageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/AdminSessionListItem' }
+
+    KeypointExport:
+      type: object
+      description: format=json (단일 세션) 응답 구조. format=jsonl 은 프레임 1건/1줄.
+      required: [session, frames]
+      properties:
+        session:
+          type: object
+          properties:
+            sessionId: { type: integer, format: int64 }
+            userId: { type: integer, format: int64 }
+            exerciseId: { type: integer, format: int64 }
+            exerciseNameKo: { type: ["string", "null"] }
+            status: { type: string }
+            startedAt: { type: ["string", "null"], format: date-time }
+            score: { type: ["number", "null"] }
+        frames:
+          type: array
+          items:
+            type: object
+            properties:
+              frameIndex: { type: integer }
+              timestampMs: { type: integer, format: int64 }
+              keypoints: { type: array, items: { type: array, items: { type: number } } }
+              bbox: { type: ["array", "null"], items: { type: number } }
+
+    StatsOverview:
+      type: object
+      required: [totalUsers, activeUsers, suspendedUsers, withdrawnUsers, totalSessions]
+      properties:
+        totalUsers: { type: integer }
+        activeUsers: { type: integer }
+        suspendedUsers: { type: integer }
+        withdrawnUsers: { type: integer }
+        totalSessions: { type: integer }
+        avgScore: { type: ["number", "null"], description: "completed 세션 평균 점수" }
+
+    StatsTimeseries:
+      type: object
+      required: [points]
+      properties:
+        points:
+          type: array
+          items:
+            type: object
+            required: [date, signups, sessions]
+            properties:
+              date: { type: string, format: date }
+              signups: { type: integer }
+              sessions: { type: integer }
+
+    AuditLog:
+      type: object
+      required: [id, adminId, action, createdAt]
+      properties:
+        id: { type: integer, format: int64 }
+        adminId: { type: integer, format: int64 }
+        action: { type: string, description: "예: export_keypoints, activate_llm, update_user_status" }
+        targetType: { type: ["string", "null"] }
+        targetId: { type: ["string", "null"] }
+        detail: { type: ["object", "null"], additionalProperties: true }
+        ipAddress: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+
+    AuditLogPage:
+      allOf:
+        - $ref: '#/components/schemas/AdminPageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/AuditLog' }
 # =============================================================================
 # (10) 안티패턴 자가점검
 # =============================================================================

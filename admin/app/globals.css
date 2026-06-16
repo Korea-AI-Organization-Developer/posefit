@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+/*
+ * PoseFit Admin — 소비자 앱과 동일한 디자인 토큰을 공유한다.
+ * (frontend/app/globals.css 와 동일 — 시각 언어 통일. 추후 공유 패키지로 추출 가능.)
+ *
+ *  ① primitive (@theme): 실제 색상값. hex는 이 블록에서만 쓴다.
+ *  ② semantic (@theme inline): 컴포넌트가 참조하는 유일한 계층.
+ */
+@theme {
+  /* ─── 기본 팔레트 제거 (SSOT 강제) ─── */
+  --color-*: initial;
+  --font-weight-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+
+  /* ─── primitive: base ─── */
+  --color-white: #ffffff;
+  --color-black: #000000;
+
+  /* ─── primitive: brand (teal) ─── */
+  --color-teal-50: #f0fdfa;
+  --color-teal-100: #ccfbf1;
+  --color-teal-200: #99f6e4;
+  --color-teal-300: #5eead4;
+  --color-teal-400: #2dd4bf;
+  --color-teal-500: #14b8a6;
+  --color-teal-600: #0d9488;
+  --color-teal-700: #0f766e;
+  --color-teal-800: #115e59;
+  --color-teal-900: #134e4a;
+
+  /* ─── primitive: neutral (파랑 끼를 살짝 둔 무채색) ─── */
+  --color-neutral-50: #f7f8f9;
+  --color-neutral-100: #eff1f3;
+  --color-neutral-200: #e3e6e8;
+  --color-neutral-300: #d1d5d9;
+  --color-neutral-400: #8b939b;
+  --color-neutral-500: #6e7681;
+  --color-neutral-600: #4f565e;
+  --color-neutral-700: #3a4047;
+  --color-neutral-800: #24282d;
+  --color-neutral-900: #16181c;
+
+  /* ─── primitive: signal ─── */
+  --color-green-50: #f0fdf4;
+  --color-green-600: #16a34a;
+  --color-amber-50: #fffbeb;
+  --color-amber-600: #d97706;
+  --color-red-50: #fef2f2;
+  --color-red-600: #dc2626;
+
+  /* ─── font weight: 400/500/600 3단계만 허용 ─── */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  /* ─── radius: 2단계로 통일 (+ rounded-full은 정적 유틸) ─── */
+  --radius-xs: 0.125rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+
+  /* ─── shadow: 아주 옅은 2단계만 ─── */
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.04);
+
+  /* ─── tracking: 큰 제목용 ─── */
+  --tracking-tight: -0.02em;
+}
+
+/*
+ * semantic 토큰 — 컴포넌트는 이 계층만 참조한다.
+ */
+@theme inline {
+  --color-bg: var(--color-neutral-50);
+  --color-surface: var(--color-white);
+  --color-surface-muted: var(--color-neutral-100);
+
+  --color-border: var(--color-neutral-200);
+  --color-border-strong: var(--color-neutral-300);
+
+  --color-text: var(--color-neutral-900);
+  --color-text-muted: var(--color-neutral-600);
+  --color-text-subtle: var(--color-neutral-400);
+
+  --color-accent: var(--color-teal-500);
+  --color-accent-hover: var(--color-teal-600);
+  --color-accent-active: var(--color-teal-700);
+  --color-accent-soft: var(--color-teal-100);
+  --color-accent-muted: var(--color-teal-50);
+
+  --color-success: var(--color-green-600);
+  --color-success-soft: var(--color-green-50);
+  --color-warning: var(--color-amber-600);
+  --color-warning-soft: var(--color-amber-50);
+  --color-danger: var(--color-red-600);
+  --color-danger-soft: var(--color-red-50);
+
+  --font-sans: var(--font-pretendard), -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo,
+    monospace;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
