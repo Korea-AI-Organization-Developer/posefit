@@ -5,14 +5,37 @@ __pycache__/
 venv/
 .venv/
 *.egg-info/
+.pytest_cache/
+*.log
 
 # Env
 .env
+*/.env
+.env.local
+.env.*.local
 
 # IDE
 .idea/
 .vscode/
 .claude/
+*/.claude/
 
 # OS
 .DS_Store
+Thumbs.db
+desktop.ini
+
+# Next.js
+.next/
+out/
+node_modules/
+*.tsbuildinfo
+npm-debug.log*
+
+# AI model weights
+*.pt
+*.pth
+*.onnx
+*.bin
+*.pkl
+*.pickle
