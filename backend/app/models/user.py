@@ -7,6 +7,7 @@ from sqlalchemy import (
     Date,
     Enum,
     ForeignKey,
+    Integer,
     Numeric,
     String,
     UniqueConstraint,
@@ -32,6 +33,12 @@ class User(Base, TimestampMixin):
         Enum(UserStatus), nullable=False, server_default=text("'active'"), comment="활성 | 탈퇴"
     )
     withdrawn_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6), nullable=True)
+    token_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default=text("0"),
+        comment="refresh 토큰 무효화용. 로그아웃 시 +1 → 이전에 발급된 refresh 토큰 전부 무효.",
+    )
 
     detail: Mapped["UserDetail"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
@@ -73,6 +80,11 @@ class SocialAccount(Base, TimestampMixin):
     provider_email: Mapped[str | None] = mapped_column(
         String(255), nullable=True, comment="개인정보. 소셜 제공자 이메일(없을 수 있음)."
     )
+    provider_avatar_url: Mapped[str | None] = mapped_column(
+        String(512),
+        nullable=True,
+        comment="개인정보. 소셜 제공자 프로필 사진 URL(없을 수 있음, 로그인 시 갱신).",
+    )
 
     user: Mapped["User"] = relationship(back_populates="social_accounts")
 
@@ -106,15 +118,12 @@ class FaceEmbedding(Base):
 
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
     embedding: Mapped[bytes] = mapped_column(
-        VARBINARY(2048),
+        VARBINARY(1024),
         nullable=False,
-        comment="개인정보. 직렬화된 임베딩 벡터(가능하면 애플리케이션 단에서 암호화).",
+        comment="개인정보. dlib 128차원 float64 직렬화 (1024 bytes).",
     )
     model_version: Mapped[str] = mapped_column(
         String(50), nullable=False, comment="임베딩 모델 버전. 동일 버전끼리만 비교 유효."
-    )
-    bin_file_url: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="원본 임베딩/이미지 파일의 오브젝트 스토리지 URL(선택)."
     )
     registered_at: Mapped[datetime] = mapped_column(
         DATETIME(fsp=6), nullable=False, server_default=text("CURRENT_TIMESTAMP(6)"), comment="등록날짜"

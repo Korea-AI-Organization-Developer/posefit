@@ -12,9 +12,6 @@ venv/
 .env
 */.env
 
-# Alembic
-alembic/versions/*.py
-
 # IDE
 .idea/
 .vscode/

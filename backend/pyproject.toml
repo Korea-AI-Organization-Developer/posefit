@@ -20,6 +20,7 @@ dependencies = [
     "opencv-contrib-python>=4.13.0.92",
     "openmim>=0.3.9",
     "passlib[bcrypt]>=1.7.4",
+    "pillow>=12.2.0",
     "pydantic-settings>=2.14.1",
     "pymysql>=1.2.0",
     "python-dotenv>=1.2.2",

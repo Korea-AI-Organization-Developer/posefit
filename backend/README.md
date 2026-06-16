@@ -125,8 +125,11 @@ services → routers ──(schemas로 응답 직렬화)──▶  HTTP 응답
 6. **main.py** — 라우터 등록
    ```python
    from app.routers import exercise
-   app.include_router(exercise.router, prefix="/api")
+   app.include_router(exercise.router, prefix="/api/v1")  # /api=네임스페이스, /v1=API 버전
    ```
+
+   → 위 예시 라우터의 실제 경로는 `http://localhost:8000/api/v1/exercises` 가 됩니다
+   (`docs/openapi.yaml` 의 servers base path `/api/v1` 과 일치).
 
 → 서버 실행 후 `http://localhost:8000/docs` 에서 바로 테스트할 수 있습니다.
 
