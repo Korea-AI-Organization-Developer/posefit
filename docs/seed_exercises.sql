@@ -2,7 +2,7 @@
 -- reference_video_url: 자세 설명 유튜브 영상
 --
 -- 실행 방법 (한글 깨짐 방지를 위해 반드시 --default-character-set=utf8mb4 옵션 사용):
---   docker exec posefit-db mysql --default-character-set=utf8mb4 -uhamin -p1234 posefit < docs/seed_exercises.sql
+--   docker exec posefit-db mysql --default-character-set=utf8mb4 -아이디 -p비밀번호 posefit < docs/seed_exercises.sql
 
 INSERT INTO exercises (name_ko, name_en, description, reference_video_url, exercise_type, is_active) VALUES
   ('런지',          'Lunge',          '한 발을 앞으로 내딛어 양 무릎을 90도로 굽혔다 펴는 하체 운동이에요. 앞 무릎이 발끝을 넘지 않게 하고, 상체는 곧게 세워 시선은 정면을 봅니다.', 'https://www.youtube.com/watch?v=BUkMLNHRpM0', 'dynamic', 1),
