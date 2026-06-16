@@ -1,52 +1,85 @@
-import io
+from __future__ import annotations
 
-import face_recognition
+import cv2
 import numpy as np
-from PIL import Image
+import face_recognition
+from dataclasses import dataclass
 
-MODEL_VERSION = "dlib-v1"
+from .face_db import FaceDB
+
+UNKNOWN = "Unknown"
 
 
-def extract_encoding(image_bytes: bytes) -> np.ndarray:
-    """이미지 바이트 → 128차원 얼굴 임베딩.
+@dataclass
+class FaceMatch:
+    top: int
+    right: int
+    bottom: int
+    left: int
+    name: str
+    confidence: float  # 0~100
 
-    Raises
-    ------
-    ValueError("FACE_NOT_DETECTED")      얼굴 없음
-    ValueError("MULTIPLE_FACES_DETECTED") 두 명 이상
+
+class FaceRecognizer:
+    """face_recognition 기반 얼굴 인식기.
+
+    Parameters
+    ----------
+    encodings_path : str | None
+        encodings.bin 경로. None 이면 ./data/encodings.bin 사용.
+    tolerance : float
+        인식 임계값 (낮을수록 엄격, 기본: 0.5)
+    scale : float
+        처리 해상도 축소 비율 (기본: 0.5)
+    model : str
+        "hog" (CPU) 또는 "cnn" (GPU)
     """
-    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    arr = np.array(img)
 
-    locations = face_recognition.face_locations(arr)
-    if len(locations) == 0:
-        raise ValueError("FACE_NOT_DETECTED")
-    if len(locations) > 1:
-        raise ValueError("MULTIPLE_FACES_DETECTED")
+    def __init__(
+        self,
+        encodings_path: str | None = None,
+        tolerance: float = 0.5,
+        scale: float = 0.5,
+        model: str = "hog",
+    ):
+        self.tolerance = tolerance
+        self.scale     = scale
+        self.model     = model
+        self._encodings, self._names = FaceDB.load(encodings_path)
+        print(f"[FaceRecognizer] {len(self._encodings)}개 인코딩  ({len(set(self._names))}명)")
 
-    encodings = face_recognition.face_encodings(arr, locations)
-    return encodings[0]  # 128-dim float64
+    def recognize(self, frame: np.ndarray) -> list[FaceMatch]:
+        """전체 프레임에서 얼굴 인식. 여러 명 동시 처리."""
+        small = cv2.resize(frame, (0, 0), fx=self.scale, fy=self.scale)
+        rgb   = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
 
+        locations = face_recognition.face_locations(rgb, model=self.model)
+        encodings = face_recognition.face_encodings(rgb, locations)
 
-def encoding_to_bytes(encoding: np.ndarray) -> bytes:
-    """numpy 배열 → DB 저장용 bytes (128 * 8 = 1024 bytes)."""
-    return encoding.astype(np.float64).tobytes()
+        results: list[FaceMatch] = []
+        for enc, loc in zip(encodings, locations):
+            name, conf = self._match(enc)
+            top, right, bottom, left = [int(v / self.scale) for v in loc]
+            results.append(FaceMatch(top, right, bottom, left, name, conf))
+        return results
 
+    def recognize_crop(self, crop: np.ndarray) -> str | None:
+        """크롭된 영역에서 얼굴 인식. 이름 또는 None 반환."""
+        if crop.size == 0:
+            return None
+        rgb       = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
+        locations = face_recognition.face_locations(rgb, model=self.model)
+        if not locations:
+            return None
+        for enc in face_recognition.face_encodings(rgb, locations):
+            name, _ = self._match(enc)
+            if name != UNKNOWN:
+                return name
+        return None
 
-def bytes_to_encoding(data: bytes) -> np.ndarray:
-    """DB bytes → numpy 배열."""
-    return np.frombuffer(data, dtype=np.float64)
-
-
-def count_faces(image_bytes: bytes) -> int:
-    """얼굴 수만 반환 — 임베딩 추출 없이 위치만 검출해 빠르다."""
-    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    return len(face_recognition.face_locations(np.array(img)))
-
-
-def is_match(stored: bytes, candidate: bytes, tolerance: float = 0.5) -> bool:
-    """등록 임베딩과 후보 임베딩 비교. tolerance 이하면 동일인."""
-    enc_stored = bytes_to_encoding(stored)
-    enc_candidate = bytes_to_encoding(candidate)
-    distance = face_recognition.face_distance([enc_stored], enc_candidate)[0]
-    return float(distance) <= tolerance
+    def _match(self, encoding: np.ndarray) -> tuple[str, float]:
+        distances = face_recognition.face_distance(self._encodings, encoding)
+        if len(distances) == 0 or distances.min() > self.tolerance:
+            return UNKNOWN, 0.0
+        best = int(np.argmin(distances))
+        return self._names[best], (1 - distances[best]) * 100
