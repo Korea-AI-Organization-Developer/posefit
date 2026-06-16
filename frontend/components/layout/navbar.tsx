@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { NavLinks } from "./nav-links";
+import { UserMenu } from "./user-menu";
 
 export interface NavbarProps {
   /** 로그인 사용자 이름 — 인증 연동 전까지 목업 기본값 */
@@ -29,25 +30,7 @@ export function Navbar({ userName = "홍길동", avatarUrl }: NavbarProps) {
 
         <NavLinks />
 
-        <div className="ml-auto flex items-center gap-3">
-          <span className="text-sm text-text-muted">{userName} 님</span>
-          {avatarUrl ? (
-            <Image
-              src={avatarUrl}
-              alt=""
-              width={32}
-              height={32}
-              className="size-8 rounded-full object-cover"
-            />
-          ) : (
-            <span
-              aria-hidden
-              className="flex size-8 items-center justify-center rounded-full bg-surface-muted text-xs font-medium text-text-muted"
-            >
-              {userName.charAt(0)}
-            </span>
-          )}
-        </div>
+        <UserMenu userName={userName} avatarUrl={avatarUrl} />
       </div>
     </header>
   );

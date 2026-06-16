@@ -9,24 +9,14 @@
  * 함수 시그니처(async)를 동일하게 유지했으므로 호출부(page.tsx)는 바뀌지 않는다.
  */
 
-export interface EmbeddedExercise {
-  id: number;
-  nameKo: string;
-}
+// 세션 도메인 타입의 SSOT 는 workout-sessions.ts — 기존 import 경로 유지를 위해 재export.
+export type {
+  EmbeddedExercise,
+  WorkoutSessionStatus,
+  WorkoutSessionSummary,
+} from "./workout-sessions";
 
-export type WorkoutSessionStatus = "in_progress" | "completed" | "aborted";
-
-export interface WorkoutSessionSummary {
-  id: number;
-  exercise: EmbeddedExercise;
-  status: WorkoutSessionStatus;
-  startedAt: string;
-  endedAt: string | null;
-  durationSec: number | null;
-  score: number | null;
-  repCount: number | null;
-  saved: boolean;
-}
+import type { WorkoutSessionSummary } from "./workout-sessions";
 
 export interface DashboardResponse {
   recentScore: number | null;

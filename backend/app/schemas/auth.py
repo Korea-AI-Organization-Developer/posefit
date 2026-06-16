@@ -1,32 +1,27 @@
-from datetime import date
-
-from pydantic import BaseModel, ConfigDict, Field
-
-from app.models.enums import Gender
+from app.schemas.base import CamelModel
+from app.schemas.user import UserRead
 
 
-class SignupCompleteRequest(BaseModel):
-    temp_token: str
-    nickname: str = Field(..., min_length=2, max_length=20)
-    birthdate: date
-    gender: Gender
-    height: float | None = Field(None, ge=50, le=250)
-    weight: float | None = Field(None, ge=20, le=300)
-    tos_agreed: bool
-    privacy_agreed: bool
-    biometric_agreed: bool
-    marketing_agreed: bool
+class AuthSocialCallbackRequest(CamelModel):
+    """프론트가 OAuth provider 에서 받은 code 를 전달 (SPA code-exchange)."""
+
+    code: str
+    redirect_uri: str
+    state: str | None = None
 
 
-class TokenResponse(BaseModel):
+class AuthSocialCallbackResponse(CamelModel):
     access_token: str
-    token_type: str = "bearer"
+    refresh_token: str
+    access_token_expires_in: int
+    is_new_user: bool
+    user: UserRead
 
 
-class UserMeResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class AuthRefreshRequest(CamelModel):
+    refresh_token: str
 
-    id: int
-    nickname: str
-    role: str
-    status: str
+
+class AuthRefreshResponse(CamelModel):
+    access_token: str
+    access_token_expires_in: int

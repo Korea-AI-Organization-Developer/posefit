@@ -1,62 +1,39 @@
-from datetime import datetime, timedelta, timezone
-
 import httpx
-from jose import JWTError, jwt
+from fastapi import HTTPException
+from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.repositories.user import UserRepository
-from app.schemas.auth import SignupCompleteRequest
+from app.schemas.auth import AuthRefreshResponse, AuthSocialCallbackResponse
+from app.security import (
+    REFRESH,
+    access_token_expires_in,
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+)
+from app.services.user import UserService
 
-GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
-
-def _make_token(payload: dict, expire_minutes: int) -> str:
-    exp = datetime.now(timezone.utc) + timedelta(minutes=expire_minutes)
-    return jwt.encode({**payload, "exp": exp}, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+SUPPORTED_PROVIDERS = {"google"}
 
 
-def make_access_token(user_id: int) -> str:
-    return _make_token({"sub": str(user_id), "type": "access"}, settings.jwt_expire_minutes)
+async def exchange_google_code(code: str, redirect_uri: str) -> dict:
+    """authorization code → access token → userinfo(sub/email/name/picture).
 
-
-def make_temp_token(google_uid: str, email: str | None, name: str) -> str:
-    return _make_token(
-        {"sub": google_uid, "email": email, "name": name, "type": "temp"},
-        settings.temp_token_expire_minutes,
-    )
-
-
-def decode_temp_token(token: str) -> dict:
-    payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
-    if payload.get("type") != "temp":
-        raise JWTError("invalid token type")
-    return payload
-
-
-def get_google_auth_url(state: str) -> str:
-    params = {
-        "client_id": settings.google_client_id,
-        "redirect_uri": settings.google_redirect_uri,
-        "response_type": "code",
-        "scope": "openid email profile",
-        "state": state,
-    }
-    query = "&".join(f"{k}={v}" for k, v in params.items())
-    return f"{GOOGLE_AUTH_URL}?{query}"
-
-
-async def exchange_google_code(code: str) -> dict:
-    async with httpx.AsyncClient() as client:
+    redirect_uri 는 프론트가 OAuth 에서 사용한 값과 동일해야 구글이 검증을 통과시킨다.
+    """
+    async with httpx.AsyncClient(timeout=10) as client:
         token_res = await client.post(
             GOOGLE_TOKEN_URL,
             data={
                 "code": code,
                 "client_id": settings.google_client_id,
                 "client_secret": settings.google_client_secret,
-                "redirect_uri": settings.google_redirect_uri,
+                "redirect_uri": redirect_uri,
                 "grant_type": "authorization_code",
             },
         )
@@ -73,45 +50,72 @@ async def exchange_google_code(code: str) -> dict:
 
 class AuthService:
     def __init__(self, db: AsyncSession):
-        self.repo = UserRepository(db)
         self.db = db
+        self.repo = UserRepository(db)
 
-    async def handle_google_callback(self, code: str):
-        """
-        구글 콜백 처리.
-        - 기존 유저 → (user, None) 반환
-        - 신규 유저 → (None, temp_token) 반환
-        """
-        userinfo = await exchange_google_code(code)
-        google_uid = userinfo["sub"]
+    async def social_login(
+        self, provider: str, code: str, redirect_uri: str
+    ) -> AuthSocialCallbackResponse:
+        if provider not in SUPPORTED_PROVIDERS:
+            raise HTTPException(status_code=400, detail=f"지원하지 않는 provider: {provider}")
+
+        try:
+            userinfo = await exchange_google_code(code, redirect_uri)
+        except (httpx.HTTPError, KeyError) as exc:
+            raise HTTPException(
+                status_code=400, detail="구글 OAuth 코드 교환에 실패했습니다"
+            ) from exc
+
+        uid = userinfo["sub"]
         email = userinfo.get("email")
-        name = userinfo.get("name", "")
+        name = userinfo.get("name") or "사용자"
+        picture = userinfo.get("picture")
 
-        user = await self.repo.find_by_social("google", google_uid)
-        if user:
-            return user, None
+        user = await self.repo.find_by_social("google", uid)
+        is_new_user = user is None
 
-        temp_token = make_temp_token(google_uid, email, name)
-        return None, temp_token
+        if is_new_user:
+            user = await self.repo.create_user(nickname=name)
+            await self.repo.create_social_account(
+                user.id, "google", uid, email, picture
+            )
+        else:
+            # 로그인 시 프로필 사진·이메일 갱신 (openapi: 로그인 시 갱신)
+            account = await self.repo.get_social_account("google", uid)
+            if account is not None:
+                account.provider_avatar_url = picture
+                account.provider_email = email
 
-    async def complete_signup(self, req: SignupCompleteRequest):
-        payload = decode_temp_token(req.temp_token)
-        google_uid = payload["sub"]
-        email = payload.get("email")
-
-        # 중복 가입 방지
-        existing = await self.repo.find_by_social("google", google_uid)
-        if existing:
-            return existing
-
-        user = await self.repo.create_user(nickname=req.nickname)
-        await self.repo.create_social_account(user.id, "google", google_uid, email)
-        await self.repo.create_user_detail(
-            user.id, req.birthdate, req.gender, req.height, req.weight
-        )
-        await self.repo.create_agreement(
-            user.id, req.tos_agreed, req.privacy_agreed, req.biometric_agreed, req.marketing_agreed
-        )
         await self.db.commit()
-        await self.db.refresh(user)
-        return user
+        await self.db.refresh(user)  # token_version 등 server_default 반영
+
+        user_read = await UserService(self.db).get_me(user.id)
+        return AuthSocialCallbackResponse(
+            access_token=create_access_token(user.id),
+            refresh_token=create_refresh_token(user.id, user.token_version),
+            access_token_expires_in=access_token_expires_in(),
+            is_new_user=is_new_user,
+            user=user_read,
+        )
+
+    async def refresh(self, refresh_token: str) -> AuthRefreshResponse:
+        try:
+            payload = decode_token(refresh_token, REFRESH)
+            user_id = int(payload["sub"])
+            ver = payload["ver"]
+        except (JWTError, KeyError, ValueError) as exc:
+            raise HTTPException(status_code=401, detail="유효하지 않은 토큰입니다") from exc
+
+        user = await self.repo.get_by_id(user_id)
+        if user is None or user.token_version != ver:
+            raise HTTPException(status_code=401, detail="유효하지 않은 토큰입니다")
+
+        return AuthRefreshResponse(
+            access_token=create_access_token(user_id),
+            access_token_expires_in=access_token_expires_in(),
+        )
+
+    async def logout(self, user) -> None:
+        """token_version 을 올려 기존 refresh 토큰을 일괄 무효화한다."""
+        user.token_version += 1
+        await self.db.commit()

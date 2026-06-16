@@ -94,7 +94,7 @@ REST API 명세는 [openapi.yaml](openapi.yaml) (base path `/api/v1`)을 기준�
 
 #### 4.1.1 얼굴 캡처 상세
 - 회원가입 마지막 단계에서 웹캠 권한 요청 후, 정면 얼굴 사진을 자동 캡처한다.
-- 캡처된 얼굴 임베딩(특징 벡터)을 서버에 저장하며, 원본 이미지의 저장 여부 및 보관 기간은 개인정보 보호 정책에 따라 결정한다.
+- 캡처된 얼굴 임베딩(특징 벡터)만 서버에 저장한다. 원본 이미지는 임베딩 추출 후 즉시 폐기한다(개인정보 최소 수집 원칙).
 - 얼굴이 검출되지 않거나 다수 검출 시 재촬영을 안내한다.
 - 운동 시작(START) 시점에 카메라에 들어온 얼굴과 등록된 얼굴을 매칭하여, 등록된 사용자에게 바운딩 박스 ID를 부여한다.
 
@@ -240,7 +240,7 @@ MySQL 기반의 주요 엔티티는 다음과 같으며, SQLAlchemy ORM 모델�
 | UserDetail (`user_details`) | `user_id(PK), height, weight, birthdate, gender(M/F/U)` | users와 1:1. 생년월일·성별 필수, 키·체중 선택 |
 | SocialAccount (`social_accounts`) | `id, user_id, provider(google), provider_uid, provider_email, provider_avatar_url` | `(provider, provider_uid)` UNIQUE. 한 사용자에 복수 연동 가능. 프로필 사진 URL은 로그인 시 갱신 |
 | Agreement (`agreements`) | `id, user_id, tos_agreed, privacy_agreed, biometric_agreed, marketing_agreed, agreed_at` | append-only — 최신 1건이 현재 동의 상태 |
-| FaceEmbedding (`face_embeddings`) | `user_id(PK), embedding(VARBINARY), model_version, bin_file_url, registered_at` | users와 1:1. 임베딩은 API 응답에 노출 금지 |
+| FaceEmbedding (`face_embeddings`) | `user_id(PK), embedding(VARBINARY), model_version, registered_at` | users와 1:1. 임베딩은 API 응답에 노출 금지 |
 | Exercise (`exercises`) | `id, name_ko, name_en, description, reference_video_url, exercise_type(static/dynamic), is_active` | 정답 키포인트는 DB 미저장 — 전처리 산출물로 서빙(T-09) |
 | WorkoutSession (`workout_sessions`) | `id, user_id, exercise_id, status(in_progress/completed/aborted), started_at, ended_at, score(0~100, DECIMAL(5,2)), rep_count, hold_sec, saved, video_url(nullable)` | 얼굴 매칭 실패 등 비정상 종료도 `aborted` |
 | KeypointFrame (`keypoint_frames`) | `id, session_id, frame_index, timestamp_ms, keypoints(JSON), bbox(JSON, nullable)` | `(session_id, frame_index)` UNIQUE |
@@ -276,7 +276,7 @@ MySQL 기반의 주요 엔티티는 다음과 같으며, SQLAlchemy ORM 모델�
 | T-02 | LLM 모델 선정 | 피드백 생성에 사용할 LLM 모델 및 비용·지연 검토 필요. |
 | T-03 | 점수 산정 알고리즘 | 관절 각도, 동작 횟수, 자세 유지 시간 등 어느 요소를 어떤 가중치로 반영할지 결정 필요. |
 | T-04 | 정답 영상 확보 방법 | 자체 촬영 vs 외부 라이선스 vs 트레이너 협업 등 결정 필요. |
-| T-05 | 얼굴 데이터 보관 정책 | 얼굴 임베딩만 저장할지, 원본 이미지도 저장할지 등 개인정보 정책 확정 필요. |
+| T-05 | 얼굴 데이터 보관 정책 | **확정** — 임베딩 벡터만 저장, 원본 이미지는 추출 후 즉시 폐기. `face_embeddings` 테이블에 `bin_file_url` 컬럼 없음. |
 | T-06 | 운동 종목 1차 확정 | 1차 출시 시범 종목 4종 확정: 런지, 플랭크, 푸쉬업, 오버헤드프레스 → 확정 완료 |
 | T-07 | 리포트 시각화 방식 | 차트 라이브러리(Recharts, Chart.js 등) 및 그래프 종류 결정 필요. |
 | T-08 | 배포 환경 | 프론트·백엔드·DB 배포 인프라(AWS/GCP/자체 서버) 결정 필요. |
