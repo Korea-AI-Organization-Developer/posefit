@@ -7,18 +7,27 @@ venv/
 .venv/
 */venv/
 *.egg-info/
+.pytest_cache/
+*.log
 
 # Env
 .env
 */.env
+.env.local
+.env.*.local
 
 # IDE
 .idea/
+*/.idea/
 .vscode/
 */.vscode/
+.claude/
+*/.claude/
 
 # OS
 .DS_Store
+Thumbs.db
+desktop.ini
 
 # test_data
 */data
@@ -26,11 +35,10 @@ venv/
 
 # 생성 파일
 *.pt
+*.pth
+*.onnx
+*.bin
+*.pkl
+*.pickle
 *_2[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.json
 output.json
-
-# claude code
-*/CLAUDE.md
-CLAUDE.md
-.claude
-*/claude
