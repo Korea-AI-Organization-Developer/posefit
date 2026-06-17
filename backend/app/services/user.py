@@ -135,7 +135,10 @@ class UserService:
             await self.db.flush()
 
         try:
+            from ai.face.face_recognizer import extract_encoding, encoding_to_bytes, MODEL_VERSION
             encoding = extract_encoding(image_bytes)
+        except ImportError:
+            raise HTTPException(status_code=503, detail="얼굴 인식 모듈이 준비되지 않았습니다")
         except ValueError as e:
             code = str(e)
             detail = (
