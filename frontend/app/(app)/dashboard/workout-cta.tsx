@@ -30,7 +30,7 @@ export function WorkoutCta({ exercises }: { exercises: ExerciseSummary[] }) {
           </p>
         </div>
         <Link
-          href="/workout"
+          href="/workout/face-gate"
           className={buttonClasses("primary", "lg", "shrink-0")}
         >
           <Play aria-hidden />

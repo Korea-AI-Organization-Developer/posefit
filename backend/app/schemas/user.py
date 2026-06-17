@@ -8,11 +8,10 @@ from app.schemas.base import CamelModel
 
 
 class RegistrationStep(str, Enum):
-    """가입 진행 단계 — DB 미저장(Derived). 약관→디테일→얼굴 순으로 채워진다."""
+    """가입 진행 단계 — DB 미저장(Derived). 약관→디테일 순으로 채워진다."""
 
     agreements_required = "agreements_required"
     detail_required = "detail_required"
-    face_required = "face_required"
     complete = "complete"
 
 
@@ -79,11 +78,3 @@ class SocialAccountRead(CamelModel):
     linked_at: datetime  # social_accounts.created_at
 
 
-# ─── Face ──────────────────────────────────────────────────────────────────
-class FaceDetectResponse(CamelModel):
-    detected: bool
-
-
-class FaceRegistrationResponse(CamelModel):
-    registered_at: datetime
-    model_version: str

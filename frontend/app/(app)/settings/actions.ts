@@ -6,14 +6,7 @@ import { redirect } from "next/navigation";
 
 import { getLatestAgreement, submitAgreements } from "@/lib/api/agreements";
 import { apiErrorMessage } from "@/lib/api/server";
-import {
-  deleteFace,
-  detectFace,
-  registerFace,
-  updateNickname,
-  upsertDetail,
-  withdraw,
-} from "@/lib/api/users";
+import { updateNickname, upsertDetail, withdraw } from "@/lib/api/users";
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "@/lib/auth/cookies";
 import type { ProfileFormValues } from "@/components/forms/profile-form";
 
@@ -55,46 +48,6 @@ export async function updateMarketingAction(
     });
   } catch (e) {
     return { error: apiErrorMessage(e, "동의 상태를 변경하지 못했어요.") };
-  }
-  revalidatePath("/settings");
-  return {};
-}
-
-/* 얼굴 감지 폴링 — 임베딩 없이 얼굴 1개 여부만 확인 (재등록 카메라용) */
-export async function detectFaceAction(
-  formData: FormData,
-): Promise<{ detected: boolean }> {
-  try {
-    const res = await detectFace(formData);
-    return { detected: res.detected };
-  } catch {
-    return { detected: false };
-  }
-}
-
-/* SET-04 — 얼굴 재등록 (PUT /users/me/face) */
-export async function reRegisterFaceAction(
-  formData: FormData,
-): Promise<{ error?: string }> {
-  const image = formData.get("image");
-  if (!(image instanceof File) || image.size === 0) {
-    return { error: "촬영된 이미지가 없어요." };
-  }
-  try {
-    await registerFace(formData, { replace: true });
-  } catch (e) {
-    return { error: apiErrorMessage(e, "얼굴 재등록에 실패했어요.") };
-  }
-  revalidatePath("/settings");
-  return {};
-}
-
-/* SET-05 — 얼굴 데이터 삭제 (DELETE /users/me/face) */
-export async function deleteFaceAction(): Promise<{ error?: string }> {
-  try {
-    await deleteFace();
-  } catch (e) {
-    return { error: apiErrorMessage(e, "얼굴 데이터를 삭제하지 못했어요.") };
   }
   revalidatePath("/settings");
   return {};
