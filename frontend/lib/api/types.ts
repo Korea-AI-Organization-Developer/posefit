@@ -101,3 +101,14 @@ export interface ExerciseSummary {
 export interface ExerciseListResponse {
   items: ExerciseSummary[];         // [] = 배열. ExerciseSummary들의 목록.
 }
+
+// ExerciseDetailResponse: 운동 상세화면 데이터 응답.
+export interface ExerciseDetailResponse {
+  id: number;
+  nameKo: string;
+  nameEn: string | null;
+  description: string | null;
+  referenceVideoUrl: string | null;
+  exerciseType: ExerciseType;
+  isActive: boolean;
+}

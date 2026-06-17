@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { formatDateWithWeekday } from "@/lib/format";
 import { getMe } from "@/lib/api/users";
 import { getCalendar, getDashboard, MOCK_TODAY } from "@/lib/mock/dashboard";
-import { getExercises } from "@/lib/mock/exercises";
+import { getExercises } from "@/lib/api/exercises";
 import { ActivityHeatmap } from "./activity-heatmap";
 import { KpiCards } from "./kpi-cards";
 import { RecentSessions } from "./recent-sessions";

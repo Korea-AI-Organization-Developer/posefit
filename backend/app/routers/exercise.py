@@ -1,7 +1,7 @@
 # APIRouter: 관련된 엔드포인트(주소)들을 한 묶음으로 만드는 도구.
 # Depends: "의존성 주입". 함수 실행 전에 필요한 것(DB 세션, 로그인 사용자)을 FastAPI가 자동으로 만들어 넣어줌.
 # Query: 쿼리 파라미터(주소 뒤 ?key=value)를 받겠다고 표시하는 도구.
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 # AsyncSession: DB 비동기 연결(세션) 타입.
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,8 +11,8 @@ from app.database import get_db
 from app.dependencies import get_current_user
 # User: 로그인 사용자 모델.
 from app.models.user import User
-# ExerciseListResponse: 이 엔드포인트의 응답 형식(스키마).
-from app.schemas.exercise import ExerciseListResponse
+# 응답 형식(스키마).
+from app.schemas.exercise import ExerciseDetail, ExerciseListResponse
 # ExerciseService: 실제 로직을 담당하는 service 층.
 from app.services.exercise import ExerciseService
 
@@ -35,3 +35,14 @@ async def list_exercises(
 ):
     # router는 "얇게": 직접 로직을 짜지 않고 service를 만들어 호출만 한다. 그 결과가 그대로 응답이 된다.
     return await ExerciseService(db).list(user, active_only)
+
+
+@router.get("/{exercise_id}", response_model=ExerciseDetail)
+async def get_exercise(
+    exercise_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await ExerciseService(db).get(exercise_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="운동 종목을 찾을 수 없습니다.")
+    return result

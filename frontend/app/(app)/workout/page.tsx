@@ -57,7 +57,7 @@ export default async function WorkoutPage() {
             <li key={exercise.id} className="flex">
               {/* 카드 클릭 시 이동할 주소. /workout/1 처럼 운동 id가 들어간 상세 페이지로 간다. */}
               <Link
-                href={`/workout/${exercise.id}`}
+                href={`/exercise/${exercise.id}`}
                 className="flex flex-1 flex-col rounded-md border border-border bg-surface p-4 transition-colors duration-150 ease-out hover:border-border-strong hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
               >
                 {src ? (

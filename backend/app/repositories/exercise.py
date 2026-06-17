@@ -47,3 +47,7 @@ class ExerciseRepository:
         # ── ③ 실행: 위에서 조립한 조회문을 DB에 보내 결과를 받는다 ────────────────
         result = await self.db.execute(stmt)   # await: DB가 답할 때까지 기다림(그동안 다른 요청 처리 가능).
         return result.all()                    # (Exercise 객체, 평균점수) 쌍들의 목록을 그대로 반환.
+
+    async def get_by_id(self, exercise_id: int) -> Exercise | None:
+        result = await self.db.execute(select(Exercise).where(Exercise.id == exercise_id))
+        return result.scalar_one_or_none()

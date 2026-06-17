@@ -5,8 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User
 # ExerciseRepository: 바로 위에서 본 DB 조회 담당 층. service가 이걸 불러 쓴다.
 from app.repositories.exercise import ExerciseRepository
-# 응답 형식(스키마) 두 개를 가져온다. service가 조회 결과를 이 모양으로 변환해 돌려준다.
-from app.schemas.exercise import ExerciseListResponse, ExerciseSummary
+# 응답 형식(스키마)들을 가져온다. service가 조회 결과를 이 모양으로 변환해 돌려준다.
+from app.schemas.exercise import ExerciseDetail, ExerciseListResponse, ExerciseSummary
 
 
 # ExerciseService: "무엇을 할지" 결정하는 로직 층. 이번 API는 단순해서 얇다(조회 결과를 응답 형식으로 정리만).
@@ -36,3 +36,9 @@ class ExerciseService:
         ]
         # 변환된 요약 리스트를 최종 응답 객체에 담아 반환. (router가 이걸 camelCase JSON으로 내보낸다.)
         return ExerciseListResponse(items=items)
+
+    async def get(self, exercise_id: int) -> ExerciseDetail | None:
+        exercise = await self.repo.get_by_id(exercise_id)
+        if exercise is None:
+            return None
+        return ExerciseDetail.model_validate(exercise)
