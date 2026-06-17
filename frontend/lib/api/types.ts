@@ -6,8 +6,9 @@
 export type RegistrationStep =
   | "agreements_required"
   | "detail_required"
-  | "face_required"
   | "complete";
+
+export type FaceGateMode = "registration" | "verification";
 
 export type Gender = "M" | "F" | "U";
 
@@ -77,15 +78,6 @@ export interface AgreementCreateRequest {
   privacyAgreed: boolean;
   biometricAgreed: boolean;
   marketingAgreed?: boolean;
-}
-
-export interface FaceDetectResponse {
-  detected: boolean;
-}
-
-export interface FaceRegistrationResponse {
-  registeredAt: string; // date-time
-  modelVersion: string;
 }
 
 // ─── 이번에 추가한 운동(exercise) 관련 타입들 ───────────────────────────────
