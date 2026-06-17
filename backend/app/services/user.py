@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ai.face.face_recognizer import MODEL_VERSION, encoding_to_bytes, extract_encoding
 from app.models.enums import UserStatus
 from app.models.user import User
 from app.repositories.user import UserRepository
@@ -124,6 +123,11 @@ class UserService:
     async def register_face(
         self, user_id: int, image_bytes: bytes, *, replace: bool
     ) -> FaceRegistrationResponse:
+        try:
+            from ai.face.face_recognizer import MODEL_VERSION, encoding_to_bytes, extract_encoding
+        except ImportError:
+            raise HTTPException(status_code=503, detail="얼굴 인식 모듈이 설치되지 않았습니다")
+
         if not image_bytes:
             raise HTTPException(status_code=422, detail="이미지가 비어 있습니다")
 
