@@ -1,0 +1,222 @@
+{
+  "source": "plank_true_13.json",
+  "window_sec": 5,
+  "windows": [
+    {
+      "video_file": "plank_true_13.mp4",
+      "window_id": 0,
+      "start_sec": 0.0,
+      "end_sec": 4.97,
+      "frame_count": 150,
+      "features": {
+        "body_line_angle": null,
+        "hip_drop_ratio": null,
+        "hip_pike_ratio": null,
+        "head_drop_ratio": null,
+        "head_rise_ratio": null,
+        "torso_horizontal_angle": null,
+        "elbow_angle": {
+          "mean": 77.069,
+          "std": 0.678,
+          "min": 75.713,
+          "max": 78.806
+        },
+        "ankle_angle": null,
+        "shoulder_collapse_ratio": null
+      },
+      "annotation": {
+        "골반처짐_hip_sag": "",
+        "골반솟음_hip_pike": "",
+        "목떨어짐_head_drop": "",
+        "머리치켜듦_head_rise": "",
+        "몸통기울어짐_body_tilt": "",
+        "팔꿈치각도이탈_elbow_deviation": "",
+        "발목정렬불량_ankle_misalignment": "",
+        "어깨무너짐_shoulder_collapse": "",
+        "몸통흔들림_unstable_body": "",
+        "주오류": "",
+        "메모": ""
+      }
+    },
+    {
+      "video_file": "plank_true_13.mp4",
+      "window_id": 1,
+      "start_sec": 5.0,
+      "end_sec": 9.97,
+      "frame_count": 150,
+      "features": {
+        "body_line_angle": null,
+        "hip_drop_ratio": null,
+        "hip_pike_ratio": null,
+        "head_drop_ratio": null,
+        "head_rise_ratio": null,
+        "torso_horizontal_angle": null,
+        "elbow_angle": {
+          "mean": 78.415,
+          "std": 1.181,
+          "min": 76.185,
+          "max": 81.456
+        },
+        "ankle_angle": null,
+        "shoulder_collapse_ratio": null
+      },
+      "annotation": {
+        "골반처짐_hip_sag": "",
+        "골반솟음_hip_pike": "",
+        "목떨어짐_head_drop": "",
+        "머리치켜듦_head_rise": "",
+        "몸통기울어짐_body_tilt": "",
+        "팔꿈치각도이탈_elbow_deviation": "",
+        "발목정렬불량_ankle_misalignment": "",
+        "어깨무너짐_shoulder_collapse": "",
+        "몸통흔들림_unstable_body": "",
+        "주오류": "",
+        "메모": ""
+      }
+    },
+    {
+      "video_file": "plank_true_13.mp4",
+      "window_id": 2,
+      "start_sec": 10.0,
+      "end_sec": 14.97,
+      "frame_count": 150,
+      "features": {
+        "body_line_angle": null,
+        "hip_drop_ratio": null,
+        "hip_pike_ratio": null,
+        "head_drop_ratio": null,
+        "head_rise_ratio": null,
+        "torso_horizontal_angle": null,
+        "elbow_angle": {
+          "mean": 78.039,
+          "std": 0.805,
+          "min": 76.387,
+          "max": 80.907
+        },
+        "ankle_angle": null,
+        "shoulder_collapse_ratio": null
+      },
+      "annotation": {
+        "골반처짐_hip_sag": "",
+        "골반솟음_hip_pike": "",
+        "목떨어짐_head_drop": "",
+        "머리치켜듦_head_rise": "",
+        "몸통기울어짐_body_tilt": "",
+        "팔꿈치각도이탈_elbow_deviation": "",
+        "발목정렬불량_ankle_misalignment": "",
+        "어깨무너짐_shoulder_collapse": "",
+        "몸통흔들림_unstable_body": "",
+        "주오류": "",
+        "메모": ""
+      }
+    },
+    {
+      "video_file": "plank_true_13.mp4",
+      "window_id": 3,
+      "start_sec": 15.0,
+      "end_sec": 19.97,
+      "frame_count": 150,
+      "features": {
+        "body_line_angle": null,
+        "hip_drop_ratio": null,
+        "hip_pike_ratio": null,
+        "head_drop_ratio": null,
+        "head_rise_ratio": null,
+        "torso_horizontal_angle": null,
+        "elbow_angle": {
+          "mean": 78.837,
+          "std": 2.355,
+          "min": 71.224,
+          "max": 82.399
+        },
+        "ankle_angle": null,
+        "shoulder_collapse_ratio": null
+      },
+      "annotation": {
+        "골반처짐_hip_sag": "",
+        "골반솟음_hip_pike": "",
+        "목떨어짐_head_drop": "",
+        "머리치켜듦_head_rise": "",
+        "몸통기울어짐_body_tilt": "",
+        "팔꿈치각도이탈_elbow_deviation": "",
+        "발목정렬불량_ankle_misalignment": "",
+        "어깨무너짐_shoulder_collapse": "",
+        "몸통흔들림_unstable_body": "",
+        "주오류": "",
+        "메모": ""
+      }
+    },
+    {
+      "video_file": "plank_true_13.mp4",
+      "window_id": 4,
+      "start_sec": 20.0,
+      "end_sec": 24.97,
+      "frame_count": 150,
+      "features": {
+        "body_line_angle": null,
+        "hip_drop_ratio": null,
+        "hip_pike_ratio": null,
+        "head_drop_ratio": null,
+        "head_rise_ratio": null,
+        "torso_horizontal_angle": null,
+        "elbow_angle": {
+          "mean": 79.745,
+          "std": 1.503,
+          "min": 76.161,
+          "max": 83.017
+        },
+        "ankle_angle": null,
+        "shoulder_collapse_ratio": null
+      },
+      "annotation": {
+        "골반처짐_hip_sag": "",
+        "골반솟음_hip_pike": "",
+        "목떨어짐_head_drop": "",
+        "머리치켜듦_head_rise": "",
+        "몸통기울어짐_body_tilt": "",
+        "팔꿈치각도이탈_elbow_deviation": "",
+        "발목정렬불량_ankle_misalignment": "",
+        "어깨무너짐_shoulder_collapse": "",
+        "몸통흔들림_unstable_body": "",
+        "주오류": "",
+        "메모": ""
+      }
+    },
+    {
+      "video_file": "plank_true_13.mp4",
+      "window_id": 5,
+      "start_sec": 25.0,
+      "end_sec": 26.77,
+      "frame_count": 54,
+      "features": {
+        "body_line_angle": null,
+        "hip_drop_ratio": null,
+        "hip_pike_ratio": null,
+        "head_drop_ratio": null,
+        "head_rise_ratio": null,
+        "torso_horizontal_angle": null,
+        "elbow_angle": {
+          "mean": 77.865,
+          "std": 1.691,
+          "min": 75.475,
+          "max": 81.192
+        },
+        "ankle_angle": null,
+        "shoulder_collapse_ratio": null
+      },
+      "annotation": {
+        "골반처짐_hip_sag": "",
+        "골반솟음_hip_pike": "",
+        "목떨어짐_head_drop": "",
+        "머리치켜듦_head_rise": "",
+        "몸통기울어짐_body_tilt": "",
+        "팔꿈치각도이탈_elbow_deviation": "",
+        "발목정렬불량_ankle_misalignment": "",
+        "어깨무너짐_shoulder_collapse": "",
+        "몸통흔들림_unstable_body": "",
+        "주오류": "",
+        "메모": ""
+      }
+    }
+  ]
+}

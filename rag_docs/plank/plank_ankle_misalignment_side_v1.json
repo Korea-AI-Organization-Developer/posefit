@@ -1,0 +1,71 @@
+{
+  "doc_id": "plank_ankle_misalignment_side_v1",
+  "doc_type": "coaching_case",
+  "issue_key": "ankle_misalignment",
+  "운동명": "플랭크",
+  "촬영방향": "측면",
+  "라벨": "오류",
+  "오류설명": "플랭크에서 발목 정렬이 무너져 무릎-발목 라인이 수평에서 크게 벗어난 상태입니다. 주로 hip_sag·hip_pike와 연쇄적으로 발생합니다.",
+  "관찰사례": {
+    "출처_영상목록": [
+      "plank_false_1.mp4",
+      "plank_false_3.mp4",
+      "plank_false_4.mp4",
+      "plank_false_5.mp4",
+      "plank_false_8.mp4",
+      "plank_false_9.mp4"
+    ],
+    "window_수": 10,
+    "body_line_angle": {
+      "mean": 143.2,
+      "min": 127.829,
+      "max": 167.452
+    },
+    "hip_drop_ratio": {
+      "mean": 0.022,
+      "min": 0.0,
+      "max": 0.142
+    },
+    "hip_pike_ratio": {
+      "mean": 0.348,
+      "min": 0.0,
+      "max": 0.53
+    },
+    "head_drop_ratio": {
+      "mean": 0.223,
+      "min": 0.118,
+      "max": 0.315
+    },
+    "torso_horizontal_angle": {
+      "mean": 17.541,
+      "min": 0.819,
+      "max": 25.511
+    },
+    "elbow_angle": {
+      "mean": 91.958,
+      "min": 70.357,
+      "max": 104.596
+    },
+    "ankle_angle": {
+      "mean": 19.727,
+      "min": 6.218,
+      "max": 60.158
+    }
+  },
+  "원인가능성": [
+    "발끝 방향 불량 — 발가락이 옆으로 벌어지거나 발목이 꺾이면 발목 라인이 틀어짐",
+    "골반 자세 이상의 연쇄 반응 — hip_sag 또는 hip_pike가 전신 정렬을 무너뜨리면 발목까지 영향이 미침",
+    "족저 유연성 저하 — 종아리 및 아킬레스건이 단축되면 발목 도르시플렉션이 제한되어 정렬이 어긋남"
+  ],
+  "코칭문구": [
+    "발끝을 정면(바닥 방향)으로 향하게 하고, 발목은 자연스럽게 90°를 유지하세요.",
+    "발뒤꿈치를 뒤쪽으로 밀어내는 느낌을 유지하면 발목 정렬이 자연스럽게 잡힙니다."
+  ],
+  "주의사항": "발목 통증이 있다면 운동을 중단하고 족저근막 스트레칭을 병행하세요.",
+  "검색키워드": [
+    "플랭크",
+    "측면",
+    "ankle_misalignment",
+    "발목 정렬"
+  ]
+}

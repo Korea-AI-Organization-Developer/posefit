@@ -1,0 +1,82 @@
+{
+  "source": "plank_false_7.json",
+  "window_sec": 5,
+  "windows": [
+    {
+      "video_file": "plank_false_7.mp4",
+      "window_id": 0,
+      "start_sec": 0.0,
+      "end_sec": 4.03,
+      "frame_count": 243,
+      "features": {
+        "body_line_angle": {
+          "mean": 167.13,
+          "std": 3.688,
+          "min": 159.154,
+          "max": 174.465
+        },
+        "hip_drop_ratio": {
+          "mean": 0.0,
+          "std": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "hip_pike_ratio": {
+          "mean": 0.13,
+          "std": 0.04,
+          "min": 0.055,
+          "max": 0.216
+        },
+        "head_drop_ratio": {
+          "mean": 0.194,
+          "std": 0.027,
+          "min": 0.148,
+          "max": 0.306
+        },
+        "head_rise_ratio": {
+          "mean": 0.0,
+          "std": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "torso_horizontal_angle": {
+          "mean": 2.931,
+          "std": 1.705,
+          "min": 0.009,
+          "max": 6.451
+        },
+        "elbow_angle": {
+          "mean": 129.781,
+          "std": 11.62,
+          "min": 100.757,
+          "max": 143.724
+        },
+        "ankle_angle": {
+          "mean": 4.223,
+          "std": 3.729,
+          "min": 0.018,
+          "max": 13.106
+        },
+        "shoulder_collapse_ratio": {
+          "mean": -0.007,
+          "std": 0.012,
+          "min": -0.042,
+          "max": 0.021
+        }
+      },
+      "annotation": {
+        "골반처짐_hip_sag": "",
+        "골반솟음_hip_pike": "",
+        "목떨어짐_head_drop": "",
+        "머리치켜듦_head_rise": "",
+        "몸통기울어짐_body_tilt": "",
+        "팔꿈치각도이탈_elbow_deviation": "",
+        "발목정렬불량_ankle_misalignment": "",
+        "어깨무너짐_shoulder_collapse": "",
+        "몸통흔들림_unstable_body": "",
+        "주오류": "",
+        "메모": ""
+      }
+    }
+  ]
+}

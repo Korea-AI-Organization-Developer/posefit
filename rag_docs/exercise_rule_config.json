@@ -1,0 +1,129 @@
+{
+  "_comment": "threshold는 vitpose_normalized answer 영상 분포 기반으로 설정 (2026-06-15)",
+  "_threshold_basis": {
+    "body_line_angle" : "answer p5=162.1°, 오류 기준을 p5 아래 여유값으로 설정",
+    "hip_drop_ratio"  : "answer max=0.198, 오류 기준을 max 직상 설정",
+    "hip_pike_ratio"  : "answer max=0.117, 오류 기준을 max+buffer 설정",
+    "head_drop_ratio" : "answer p95=0.237, 오류 기준을 p95+buffer 설정",
+    "head_rise_ratio" : "answer max=0.051, 오류 기준을 max+buffer 설정",
+    "torso_horizontal_angle": "answer max=13.5°, 오류 기준을 max+buffer 설정",
+    "elbow_angle"     : "answer p5=74°, p95=99°, 오류 기준을 양쪽 바깥으로 설정",
+    "ankle_angle"     : "answer max=13.0°, 오류 기준을 max+buffer 설정"
+  },
+
+  "plank": {
+    "side": {
+      "issues": [
+        {
+          "issue"       : "hip_sag",
+          "description" : "골반 처짐",
+          "phase"       : "hold",
+          "condition_logic": "OR",
+          "conditions"  : [
+            { "feature": "body_line_angle", "operator": "<",  "threshold": 160.0 },
+            { "feature": "hip_drop_ratio",  "operator": ">",  "threshold": 0.20  }
+          ],
+          "min_confidence": 0.7
+        },
+        {
+          "issue"       : "hip_pike",
+          "description" : "골반 솟음",
+          "phase"       : "hold",
+          "condition_logic": "OR",
+          "conditions"  : [
+            { "feature": "body_line_angle", "operator": "<",  "threshold": 160.0 },
+            { "feature": "hip_pike_ratio",  "operator": ">",  "threshold": 0.15  }
+          ],
+          "min_confidence": 0.7
+        },
+        {
+          "issue"       : "head_drop",
+          "description" : "목 떨어짐",
+          "phase"       : "hold",
+          "condition_logic": "AND",
+          "conditions"  : [
+            { "feature": "head_drop_ratio", "operator": ">",  "threshold": 0.30  }
+          ],
+          "min_confidence": 0.7
+        },
+        {
+          "issue"       : "head_rise",
+          "description" : "머리 치켜듦",
+          "phase"       : "hold",
+          "condition_logic": "AND",
+          "conditions"  : [
+            { "feature": "head_rise_ratio", "operator": ">",  "threshold": 0.10  }
+          ],
+          "min_confidence": 0.7
+        },
+        {
+          "issue"       : "body_tilt",
+          "description" : "몸통 기울어짐 (수평 미유지)",
+          "phase"       : "hold",
+          "condition_logic": "AND",
+          "conditions"  : [
+            { "feature": "torso_horizontal_angle", "operator": ">", "threshold": 15.0 }
+          ],
+          "min_confidence": 0.7
+        },
+        {
+          "issue"       : "elbow_deviation",
+          "description" : "팔꿈치 각도 이탈 (90° 기준)",
+          "phase"       : "hold",
+          "condition_logic": "OR",
+          "conditions"  : [
+            { "feature": "elbow_angle", "operator": "<", "threshold": 70.0  },
+            { "feature": "elbow_angle", "operator": ">", "threshold": 110.0 }
+          ],
+          "min_confidence": 0.4
+        },
+        {
+          "issue"       : "ankle_misalignment",
+          "description" : "발목 정렬 불량",
+          "phase"       : "hold",
+          "condition_logic": "AND",
+          "conditions"  : [
+            { "feature": "ankle_angle", "operator": ">", "threshold": 15.0 }
+          ],
+          "min_confidence": 0.4
+        },
+        {
+          "issue"       : "unstable_body",
+          "description" : "몸통 흔들림 (자세 불안정)",
+          "phase"       : "hold",
+          "condition_logic": "OR",
+          "conditions"  : [
+            { "feature": "body_line_angle_std",   "operator": ">", "threshold": 3.0 },
+            { "feature": "body_line_angle_range",  "operator": ">", "threshold": 10.0 }
+          ],
+          "min_confidence": 0.7,
+          "_calibration_note": "정답 p95: std=1.36°, range=6.5° — 여유값 2배 이상 초과 시 불안정으로 판정"
+        },
+        {
+          "issue"       : "shoulder_collapse",
+          "description" : "어깨 무너짐 (견갑골 지지 실패)",
+          "phase"       : "hold",
+          "condition_logic": "AND",
+          "conditions"  : [
+            { "feature": "shoulder_collapse_ratio", "operator": "<", "threshold": -0.04 }
+          ],
+          "min_confidence": 0.4,
+          "_calibration_note": "정답 p5=-0.037 기준. wrong 샘플 부족 — 추가 영상 확보 후 재보정 필요"
+        }
+      ],
+
+      "feature_stats_reference": {
+        "_source"              : "vitpose_normalized, answer 12개 영상, 총 1539 프레임",
+        "body_line_angle"      : { "mean": 172.0, "std": 4.6,  "p5": 162.1, "p95": 177.3 },
+        "hip_drop_ratio"       : { "mean": 0.068, "std": 0.059, "p95": 0.189, "max": 0.198 },
+        "hip_pike_ratio"       : { "mean": 0.016, "std": 0.031, "p95": 0.081, "max": 0.117 },
+        "head_drop_ratio"      : { "mean": 0.134, "std": 0.066, "p95": 0.237, "max": 0.259 },
+        "head_rise_ratio"      : { "mean": 0.000, "std": 0.003, "max": 0.051 },
+        "torso_horizontal_angle": { "mean": 5.2,  "std": 3.5,  "p95": 11.7, "max": 13.5  },
+        "elbow_angle"          : { "mean": 88.1, "std": 7.7,  "p5": 74.2,  "p95": 99.2  },
+        "ankle_angle"          : { "mean": 4.3,  "std": 3.2,  "p95": 10.5, "max": 13.0  },
+        "shoulder_collapse_ratio": { "mean": 0.047, "std": 0.057, "p5": -0.037, "min": -0.062, "max": 0.140 }
+      }
+    }
+  }
+}

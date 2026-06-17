@@ -1,0 +1,158 @@
+{
+  "source": "plank_false_4.json",
+  "window_sec": 5,
+  "windows": [
+    {
+      "video_file": "plank_false_4.mp4",
+      "window_id": 0,
+      "start_sec": 0.0,
+      "end_sec": 4.97,
+      "frame_count": 150,
+      "features": {
+        "body_line_angle": {
+          "mean": 149.183,
+          "std": 14.203,
+          "min": 128.119,
+          "max": 179.953
+        },
+        "hip_drop_ratio": {
+          "mean": 0.077,
+          "std": 0.117,
+          "min": 0.0,
+          "max": 0.296
+        },
+        "hip_pike_ratio": {
+          "mean": 0.238,
+          "std": 0.206,
+          "min": 0.0,
+          "max": 0.518
+        },
+        "head_drop_ratio": {
+          "mean": 0.159,
+          "std": 0.109,
+          "min": 0.0,
+          "max": 0.322
+        },
+        "head_rise_ratio": {
+          "mean": 0.006,
+          "std": 0.013,
+          "min": 0.0,
+          "max": 0.055
+        },
+        "torso_horizontal_angle": {
+          "mean": 18.081,
+          "std": 8.455,
+          "min": 0.004,
+          "max": 27.14
+        },
+        "elbow_angle": {
+          "mean": 90.873,
+          "std": 7.4,
+          "min": 78.862,
+          "max": 104.564
+        },
+        "ankle_angle": {
+          "mean": 11.027,
+          "std": 5.199,
+          "min": 0.149,
+          "max": 18.957
+        },
+        "shoulder_collapse_ratio": {
+          "mean": -0.019,
+          "std": 0.128,
+          "min": -0.163,
+          "max": 0.181
+        }
+      },
+      "annotation": {
+        "골반처짐_hip_sag": "",
+        "골반솟음_hip_pike": "",
+        "목떨어짐_head_drop": "",
+        "머리치켜듦_head_rise": "",
+        "몸통기울어짐_body_tilt": "",
+        "팔꿈치각도이탈_elbow_deviation": "",
+        "발목정렬불량_ankle_misalignment": "",
+        "어깨무너짐_shoulder_collapse": "",
+        "몸통흔들림_unstable_body": "",
+        "주오류": "",
+        "메모": ""
+      }
+    },
+    {
+      "video_file": "plank_false_4.mp4",
+      "window_id": 1,
+      "start_sec": 5.0,
+      "end_sec": 6.97,
+      "frame_count": 60,
+      "features": {
+        "body_line_angle": {
+          "mean": 156.74,
+          "std": 1.296,
+          "min": 154.086,
+          "max": 158.865
+        },
+        "hip_drop_ratio": {
+          "mean": 0.243,
+          "std": 0.015,
+          "min": 0.219,
+          "max": 0.273
+        },
+        "hip_pike_ratio": {
+          "mean": 0.0,
+          "std": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "head_drop_ratio": {
+          "mean": 0.001,
+          "std": 0.002,
+          "min": 0.0,
+          "max": 0.007
+        },
+        "head_rise_ratio": {
+          "mean": 0.005,
+          "std": 0.007,
+          "min": 0.0,
+          "max": 0.028
+        },
+        "torso_horizontal_angle": {
+          "mean": 22.277,
+          "std": 0.534,
+          "min": 20.872,
+          "max": 23.139
+        },
+        "elbow_angle": {
+          "mean": 84.99,
+          "std": 0.707,
+          "min": 83.44,
+          "max": 86.146
+        },
+        "ankle_angle": {
+          "mean": 8.852,
+          "std": 1.099,
+          "min": 6.953,
+          "max": 11.099
+        },
+        "shoulder_collapse_ratio": {
+          "mean": 0.135,
+          "std": 0.005,
+          "min": 0.127,
+          "max": 0.148
+        }
+      },
+      "annotation": {
+        "골반처짐_hip_sag": "",
+        "골반솟음_hip_pike": "",
+        "목떨어짐_head_drop": "",
+        "머리치켜듦_head_rise": "",
+        "몸통기울어짐_body_tilt": "",
+        "팔꿈치각도이탈_elbow_deviation": "",
+        "발목정렬불량_ankle_misalignment": "",
+        "어깨무너짐_shoulder_collapse": "",
+        "몸통흔들림_unstable_body": "",
+        "주오류": "",
+        "메모": ""
+      }
+    }
+  ]
+}
