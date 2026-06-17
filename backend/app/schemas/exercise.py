@@ -27,3 +27,15 @@ class ExerciseSummary(CamelModel):
 #                       openapi의 ExerciseListResponse 와 동일.
 class ExerciseListResponse(CamelModel):
     items: list[ExerciseSummary]     # ExerciseSummary(운동 요약)들을 담은 리스트(배열).
+
+
+# ExerciseDetail: 단건 상세 API(GET /exercises/{id})의 응답 형식.
+#                 openapi의 Exercise 스키마와 1:1.
+class ExerciseDetail(CamelModel):
+    id: int
+    name_ko: str
+    name_en: str | None
+    description: str | None
+    reference_video_url: str | None
+    exercise_type: ExerciseType
+    is_active: bool

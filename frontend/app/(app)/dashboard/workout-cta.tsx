@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Dumbbell, Play } from "lucide-react";
 import { buttonClasses } from "@/components/ui";
 import { formatScore } from "@/lib/format";
-import type { ExerciseSummary, ExerciseType } from "@/lib/mock/exercises";
+import type { ExerciseSummary, ExerciseType } from "@/lib/api/exercises";
 
 const exerciseTypeLabel: Record<ExerciseType, string> = {
   dynamic: "동적",
@@ -44,7 +44,7 @@ export function WorkoutCta({ exercises }: { exercises: ExerciseSummary[] }) {
           return (
             <li key={exercise.id} className="flex">
               <Link
-                href={`/workout/${exercise.id}`}
+                href={`/exercise/${exercise.id}`}
                 className="flex flex-1 flex-col rounded-sm border border-border p-4 transition-colors duration-150 ease-out hover:border-border-strong hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
               >
                 {/* 픽토그램이 타일의 남는 높이를 채운다 */}
