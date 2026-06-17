@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 # auth, users 에 더해 새로 만든 exercise 라우터를 함께 가져온다(import). ← 이번에 exercise 추가됨.
-from app.routers import admin_auth, admin_users, auth, exercise, users, workout, workout_session
+from app.routers import admin_auth, admin_users, auth, exercise, report, users, workout, workout_session
 
 app = FastAPI(title="PoseFit API")
 
@@ -27,6 +27,7 @@ app.include_router(users.router, prefix="/api/v1")
 # exercise 라우터를 앱에 등록. 이 줄이 있어야 /api/v1/exercises 주소가 실제로 동작한다. ← 이번에 추가됨.
 # prefix="/api/v1" + 라우터의 prefix="/exercises" 가 합쳐져 최종 경로는 /api/v1/exercises.
 app.include_router(exercise.router, prefix="/api/v1")
+app.include_router(report.router, prefix="/api/v1")
 app.include_router(workout.router, prefix="/api/v1")
 app.include_router(workout_session.router, prefix="/api/v1")
 app.include_router(admin_auth.router, prefix="/api/v1")
