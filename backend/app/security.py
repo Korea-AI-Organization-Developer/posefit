@@ -14,6 +14,8 @@ from app.config import settings
 
 ACCESS = "access"
 REFRESH = "refresh"
+ADMIN_ACCESS = "admin_access"
+ADMIN_REFRESH = "admin_refresh"
 
 
 def _encode(payload: dict, expires: timedelta) -> str:
@@ -35,6 +37,20 @@ def create_access_token(user_id: int) -> str:
 def create_refresh_token(user_id: int, token_version: int) -> str:
     return _encode(
         {"sub": str(user_id), "type": REFRESH, "ver": token_version},
+        timedelta(days=settings.refresh_token_expire_days),
+    )
+
+
+def create_admin_access_token(admin_id: int) -> str:
+    return _encode(
+        {"sub": str(admin_id), "type": ADMIN_ACCESS},
+        timedelta(minutes=settings.access_token_expire_minutes),
+    )
+
+
+def create_admin_refresh_token(admin_id: int, token_version: int) -> str:
+    return _encode(
+        {"sub": str(admin_id), "type": ADMIN_REFRESH, "ver": token_version},
         timedelta(days=settings.refresh_token_expire_days),
     )
 
