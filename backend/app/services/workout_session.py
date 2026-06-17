@@ -3,13 +3,14 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enums import SessionStatus
 from app.repositories.exercise import ExerciseRepository
 from app.repositories.workout_session import WorkoutSessionRepository
 from app.schemas.workout import StopSessionResponse
+from app.schemas.workout_session import WorkoutSessionCreateRequest, WorkoutSessionRead
 
 UPLOAD_DIR = Path("uploads/workout_sessions")
 VIDEO_SAVE_BASE = Path("C:/posefit_saves")
@@ -25,6 +26,31 @@ class WorkoutSessionService:
         self.repo = WorkoutSessionRepository(db)
         self.exercise_repo = ExerciseRepository(db)
         self.db = db
+
+    async def create(self, user_id: int, req: WorkoutSessionCreateRequest) -> WorkoutSessionRead:
+        exercise = await self.exercise_repo.get_by_id(req.exercise_id)
+        if exercise is None or not exercise.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="존재하지 않거나 비활성화된 운동 종목입니다",
+            )
+        session = await self.repo.create_in_progress(user_id, req.exercise_id)
+        await self.db.commit()
+        await self.db.refresh(session)
+        return WorkoutSessionRead.model_validate(session)
+
+    async def get(self, user_id: int, session_id: int) -> WorkoutSessionRead:
+        session = await self.repo.get_by_id(session_id)
+        if session is None or session.user_id != user_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="세션을 찾을 수 없습니다")
+        return WorkoutSessionRead.model_validate(session)
+
+    async def delete(self, user_id: int, session_id: int) -> None:
+        session = await self.repo.get_by_id(session_id)
+        if session is None or session.user_id != user_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="세션을 찾을 수 없습니다")
+        await self.repo.delete(session)
+        await self.db.commit()
 
     async def stop(
         self,
@@ -55,7 +81,6 @@ class WorkoutSessionService:
         await self.db.commit()
 
         comment = await getLlmFeedback()
-
         return StopSessionResponse(session_id=session.id, video_url=video_url, comment=comment)
 
     async def save_video(self, session_id: int, user_id: int) -> None:
@@ -75,14 +100,11 @@ class WorkoutSessionService:
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest_path = dest_dir / f"{date_str}_{session_id}.mp4"
 
-        # video_url 은 "/uploads/..." 형태 → 서버 실행 경로 기준 상대 경로로 변환
         temp_path = Path(session.video_url.lstrip("/"))
         if not temp_path.exists():
             raise HTTPException(status_code=409, detail="임시 영상 파일이 존재하지 않습니다")
 
         shutil.move(str(temp_path), str(dest_path))
-        print(f"[save] 영상 저장 완료: {dest_path}", flush=True)
-
         await self.repo.update_saved(session, str(dest_path))
         await self.db.commit()
 
