@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
-from app.schemas.report import CalendarResponse, ReportPeriod, ReportSummary, ScoreTrendResponse
+from app.schemas.report import CalendarResponse, EvaluationResponse, ReportOverview, ReportPeriod, ReportSummary, ScoreTrendResponse
 from app.services.report import ReportService
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
@@ -44,3 +44,23 @@ async def get_score_trend(
     db: AsyncSession = Depends(get_db),
 ):
     return await ReportService(db).get_score_trend(user.id, days, exercise_id)
+
+
+@router.get("/evaluation", response_model=EvaluationResponse)
+async def get_evaluation(
+    period: ReportPeriod = Query(...),
+    exercise_id: int | None = Query(default=None, alias="exerciseId"),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await ReportService(db).get_evaluation(
+        user.id, period, exercise_id, user.created_at.date()
+    )
+
+
+@router.get("/overview", response_model=ReportOverview)
+async def get_report_overview(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await ReportService(db).get_overview(user.id, user.created_at.date())

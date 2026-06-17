@@ -9,6 +9,7 @@ import {
   type TrendDays,
 } from "@/lib/mock/reports";
 import { getWorkoutSessions } from "@/lib/mock/workout-sessions";
+import { OverviewDialog } from "./overview-dialog";
 import { QueryTabs } from "./query-tabs";
 import { SavedVideos } from "./saved-videos";
 import { ScoreTrendChart } from "./score-trend-chart";
@@ -16,7 +17,7 @@ import { SummaryCard } from "./summary-card";
 
 export const metadata: Metadata = { title: "리포트" };
 
-const PERIODS: ReportPeriod[] = ["day", "week", "month", "cumulative"];
+const PERIODS: ReportPeriod[] = ["day", "week", "month"];
 const PERIOD_LABELS: Record<ReportPeriod, string> = {
   day: "일",
   week: "주",
@@ -78,18 +79,21 @@ export default async function ReportsPage({
     value: String(d),
     label: `${d}일`,
   }));
-  const exerciseOptions = [
-    { value: "all", label: "전체" },
-    ...exercises.map((e) => ({ value: String(e.id), label: e.nameKo })),
-  ];
+  const exerciseOptions = exercises.map((e) => ({
+    value: String(e.id),
+    label: e.nameKo,
+  }));
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-10">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">리포트</h1>
-        <p className="mt-1 text-sm text-text-muted">
-          운동 기록을 기간·종목별로 돌아봐요
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">리포트</h1>
+          <p className="mt-1 text-sm text-text-muted">
+            운동 기록을 기간·종목별로 돌아봐요
+          </p>
+        </div>
+        <OverviewDialog />
       </header>
 
       {/* REP-07 — 종목 필터. 요약·차트·목록 전체에 적용된다. */}
@@ -99,9 +103,8 @@ export default async function ReportsPage({
           <QueryTabs
             paramKey="exerciseId"
             options={exerciseOptions}
-            value={exerciseId != null ? String(exerciseId) : "all"}
+            value={exerciseId != null ? String(exerciseId) : String(exercises[0]?.id ?? "")}
             currentParams={currentParams}
-            clearOn="all"
             size="sm"
             aria-label="종목 필터"
           />

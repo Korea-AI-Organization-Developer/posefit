@@ -5,11 +5,17 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.report import ReportRepository
+import asyncio
+
 from app.schemas.report import (
     BestExercise,
     CalendarDay,
     CalendarResponse,
     EmbeddedExercise,
+    EvaluationMessage,
+    EvaluationMessageType,
+    EvaluationResponse,
+    ReportOverview,
     ReportPeriod,
     ReportSummary,
     ScoreTrendPoint,
@@ -125,3 +131,65 @@ class ReportService:
             )
 
         return ScoreTrendResponse(series=list(series_map.values()))
+
+    async def get_evaluation(
+        self,
+        user_id: int,
+        period: ReportPeriod,
+        exercise_id: int | None,
+        user_created_at: date,
+    ) -> EvaluationResponse:
+        summary = await self.get_summary(user_id, period, None, exercise_id, user_created_at)
+        rows = await self.repo.get_summary(
+            user_id,
+            summary.period_start,
+            summary.period_end,
+            exercise_id,
+        )
+        messages: list[EvaluationMessage] = []
+        pos = EvaluationMessageType.positive
+        warn = EvaluationMessageType.warning
+        tip = EvaluationMessageType.tip
+
+        total = summary.sessions_count
+        avg = float(summary.avg_score) if summary.avg_score is not None else None
+        exercise_count = len(rows)
+
+        if total == 0:
+            messages.append(EvaluationMessage(type=warn, text="아직 운동 기록이 없어요. 오늘 첫 운동을 시작해 보세요!"))
+        else:
+            if total >= 15:
+                messages.append(EvaluationMessage(type=pos, text=f"정말 꾸준해요! 기간 내 {total}회나 운동했어요."))
+            elif total >= 7:
+                messages.append(EvaluationMessage(type=pos, text=f"꾸준히 운동하고 있어요. 총 {total}회 기록이 쌓였어요."))
+            else:
+                messages.append(EvaluationMessage(type=tip, text=f"운동 횟수를 조금 더 늘려보세요. 현재 {total}회예요."))
+
+            if avg is not None:
+                if avg >= 85:
+                    messages.append(EvaluationMessage(type=pos, text=f"평균 점수 {avg:.1f}점! 자세가 매우 안정적이에요."))
+                elif avg >= 70:
+                    messages.append(EvaluationMessage(type=tip, text=f"평균 점수 {avg:.1f}점이에요. 조금만 더 집중하면 90점도 가능해요."))
+                else:
+                    messages.append(EvaluationMessage(type=warn, text=f"평균 점수가 {avg:.1f}점이에요. 기본 자세를 다시 점검해 보세요."))
+
+            if summary.best_exercise:
+                best = summary.best_exercise
+                messages.append(EvaluationMessage(type=pos, text=f"가장 잘하는 종목은 {best.name_ko}이에요. 최고 점수 {float(best.best_score):.1f}점!"))
+
+            if exercise_count >= 3:
+                messages.append(EvaluationMessage(type=tip, text="다양한 종목을 골고루 운동하고 있어요. 균형 잡힌 루틴이에요!"))
+            elif exercise_count == 1 and total >= 5:
+                messages.append(EvaluationMessage(type=tip, text="한 종목에 집중하고 있어요. 다른 종목도 함께 도전해 보세요."))
+
+        return EvaluationResponse(period=period, exercise_id=exercise_id, messages=messages)
+
+    async def get_overview(self, user_id: int, user_created_at: date) -> ReportOverview:
+        """누적 요약 + 최근 30일 캘린더 + 최근 90일 점수 추이 + 종합 평가를 병렬로 조합."""
+        summary, calendar, score_trend, evaluation = await asyncio.gather(
+            self.get_summary(user_id, ReportPeriod.cumulative, None, None, user_created_at),
+            self.get_calendar(user_id, 30),
+            self.get_score_trend(user_id, 90, None),
+            self.get_evaluation(user_id, ReportPeriod.cumulative, None, user_created_at),
+        )
+        return ReportOverview(summary=summary, calendar=calendar, score_trend=score_trend, evaluation=evaluation)

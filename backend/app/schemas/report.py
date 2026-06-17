@@ -58,3 +58,29 @@ class ScoreTrendSeries(CamelModel):
 
 class ScoreTrendResponse(CamelModel):
     series: list[ScoreTrendSeries]
+
+
+# ─── Evaluation ───
+class EvaluationMessageType(str, Enum):
+    positive = "positive"
+    warning = "warning"
+    tip = "tip"
+
+
+class EvaluationMessage(CamelModel):
+    type: EvaluationMessageType
+    text: str
+
+
+class EvaluationResponse(CamelModel):
+    period: ReportPeriod
+    exercise_id: int | None = None
+    messages: list[EvaluationMessage]
+
+
+# ─── Overview (팝업) ───
+class ReportOverview(CamelModel):
+    summary: ReportSummary          # 누적 요약
+    calendar: CalendarResponse      # 최근 30일 캘린더
+    score_trend: ScoreTrendResponse # 최근 90일 점수 추이
+    evaluation: EvaluationResponse  # 종합 평가
