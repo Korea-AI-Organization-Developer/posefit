@@ -1,5 +1,5 @@
 # =============================================================================
-# PoseFit API Specification (v0.2.0)
+# PoseFit API Specification (v0.3.0)
 # 근거: docs/erd.sql (팀 회의 확정안) = backend/app/models/,
 #       docs/requirements.md, docs/wireframe/
 #
@@ -8,6 +8,20 @@
 #   (2) ERD 키 쿼리(Q-R*/Q-W*) → endpoint 매핑
 #   (3) 실시간 파이프라인(START~STOP) 데이터 흐름
 #   (4) components.schemas → paths
+#
+# v0.3.0 변경 (2026-06-17) — 세션/피드백/리포트 단순화:
+#   - STOP(:stop): 실시간 프레임 트래킹 대신 운동 영상 전체를 한 번에
+#     멀티파트 업로드 → 응답으로 RAG/LLM 코칭 comment 반환.
+#   - 영상 저장(:save): 단일 영상 멀티파트 업로드 → success 만 반환.
+#     DB(workout_sessions.video_url)에는 서버상의 저장 경로(URL)만 기록
+#     (presigned URL · 클라이언트 직접 PUT 흐름 폐기).
+#   - 바이트(키포인트) 트래킹 + 얼굴 인식(:start, /frames)은 향후 발전
+#     가능성을 위해 "주석 처리"로 보존 (제거하지 않음).
+#   - 세션 피드백 조회: /workout-sessions/{id}/feedbacks →
+#     /exercises/{id}/feedbacks (식별자를 exerciseId 로 교체),
+#     조회는 "당일(KST)" 조건만 적용 (운동 중 날짜 변경은 미고려).
+#   - 리포트: 기관(organizationId)·운동(exerciseId) 필터를 가진
+#     종합 평가 endpoint(GET /reports/evaluation) 신설.
 #
 # v0.2.0 변경 (2026-06-10) — erd.sql / backend/app/models/ 확정안 반영:
 #   - exercises: slug·difficulty·bodyPart·metricType·thumbnailUrl 제거
@@ -53,18 +67,18 @@
 #   (선택) 정답 키포인트 prefetch       → GET  /exercises/{id}/reference-keypoints
 #   "운동 시작" 클릭                    → (라우팅: SCR-08)
 #
-# SCR-08 운동 실행 (실시간 파이프라인 — 아래 (3) 참고)
+# SCR-08 운동 실행 (영상 일괄 업로드 — 아래 (3) 참고)
 #   START 클릭                         → POST /workout-sessions
-#                                      → POST /workout-sessions/{id}:start
-#   (서버 추론 시) 프레임 업로드        → POST /workout-sessions/{id}/frames
-#   STOP 클릭                          → POST /workout-sessions/{id}:stop
+#   STOP 클릭 (운동 영상 일괄 업로드)   → POST /workout-sessions/{id}:stop  (multipart video)
+#                                        ← 응답: 세션 결과 + LLM comment
+#   # (향후 발전, 주석 처리) 얼굴 매칭     → POST /workout-sessions/{id}:start
+#   # (향후 발전, 주석 처리) 프레임 업로드 → POST /workout-sessions/{id}/frames
 #
 # SCR-09 운동 결과
 #   진입                               → GET  /workout-sessions/{id}
-#                                      → GET  /workout-sessions/{id}/feedbacks
-#   "영상 저장" 클릭                    → POST /workout-sessions/{id}/video:presign
-#                                      → (클라이언트가 presigned URL 로 PUT)
-#                                      → POST /workout-sessions/{id}:save
+#                                      → GET  /exercises/{id}/feedbacks  (당일·종목별)
+#   "영상 저장" 클릭                    → POST /workout-sessions/{id}:save  (multipart video)
+#                                        ← 응답: { success: true } (DB엔 서버 경로만 저장)
 #   "종료" 클릭 (저장 X)                → DELETE /workout-sessions/{id}
 #
 # SCR-10 보고/히스토리
@@ -117,10 +131,11 @@
 #                                          + PUT  /users/me/detail      (user_details)
 #                                          + POST /users/me/face        (face_embeddings)
 #  Q-W2  세션 생성                         → POST /workout-sessions
-#  Q-W3  프레임 bulk insert (15+ FPS)      → POST /workout-sessions/{id}/frames
-#  Q-W4  STOP 점수 산출 + 피드백 + daily_stats UPSERT → POST /workout-sessions/{id}:stop (서버 내부)
-#  Q-W5  영상 저장 확정                    → POST /workout-sessions/{id}/video:presign
-#                                          + POST /workout-sessions/{id}:save
+#  Q-W3  (향후 발전, 주석) 프레임 bulk insert → POST /workout-sessions/{id}/frames
+#  Q-W4  STOP 영상 업로드 + 점수/피드백 + daily_stats UPSERT
+#                                          → POST /workout-sessions/{id}:stop (multipart video)
+#                                            ← 세션 결과 + LLM comment
+#  Q-W5  영상 저장 (서버 저장 후 경로만 DB) → POST /workout-sessions/{id}:save (multipart video)
 #  Q-W6  얼굴 재등록                       → PUT  /users/me/face
 #  Q-W7  영상 일괄 삭제                    → POST /users/me/videos:purge
 #  Q-W8  회원 탈퇴                         → DELETE /users/me
@@ -128,8 +143,8 @@
 # -----------------------------------------------------------------------------
 # (3) 실시간 파이프라인 (START ~ STOP)
 # -----------------------------------------------------------------------------
-# 요구사항 §7.1 — 서버 추론(ViTPose-Base) 확정. 단, 클라이언트 추론 전환
-# 가능성에 대비해 API 는 두 시나리오를 모두 수용한다.
+# 요구사항 §7.1 — 서버 추론(ViTPose-Base). v0.3.0 부터 STOP 시 운동 영상
+# 전체를 한 번에 업로드하면 서버가 추론·채점·RAG/LLM 코칭까지 일괄 수행한다.
 #
 #   [Client]                                            [Server]
 #   ──────────────────────────────────────────────────────────────────────
@@ -139,45 +154,36 @@
 #     body: { exerciseId }                            (status=in_progress)
 #                                        ◄─────  201 { id, status }
 #
-#   POST /workout-sessions/{id}:start    ─────────►  face_embeddings 조회 + 매칭
-#     body: { faceFrame (jpeg, base64) }              tracker 초기화
-#                                        ◄─────  200 { matched: true }
-#                                          또는 422 FACE_NOT_DETECTED
-#                                                  / MULTIPLE_FACES_DETECTED
-#                                                  / FACE_MISMATCH
-#                                          (이 경우 세션은 status=aborted)
-#
-#   ── 시나리오 A: 서버 추론 ─────────────────────────────────────────────
-#   loop (15+ FPS, 0.5~2초 배치):
-#     POST /workout-sessions/{id}/frames ──────────►  keypoint_frames bulk insert
-#       body: { frames: [{frameIndex, timestampMs,    (이때 saved=false 가정;
-#                         keypoints, bbox?}] }         최종 :save 결과에 따라 보존/폐기)
-#                                        ◄─────  202 { accepted, frameErrors? }
-#
-#   ── 시나리오 B: 클라이언트 추론 (MediaPipe 등) ────────────────────────
-#   (클라이언트가 로컬에서 추론, 메모리에 frames 누적, 서버 호출 없음)
+#   (운동 중 — 클라이언트가 로컬에서 녹화만 진행, 서버 호출 없음)
 #
 #   STOP 클릭
-#   POST /workout-sessions/{id}:stop     ─────────►  점수 산출 + 피드백 생성
-#     body: {                                         workout_sessions UPDATE
-#       frames?: [...]  // 시나리오 B 일괄 동봉       workout_daily_stats UPSERT
-#     }
-#                                        ◄─────  200 { session, feedbacks }
+#   POST /workout-sessions/{id}:stop     ─────────►  영상 포즈 추론 + 점수 산출
+#     multipart/form-data: { video }                  + RAG/LLM 코칭 생성
+#                                                      workout_sessions UPDATE
+#                                                      workout_daily_stats UPSERT
+#                                        ◄─────  200 { session, comment }
 #
 #   ── SCR-09 결과 화면 ─────────────────────────────────────────────────
 #   "영상 저장" 선택 시:
-#     POST /workout-sessions/{id}/video:presign  ──►  presigned URL 발급
-#                                        ◄─────  200 { uploadUrl, objectKey,
-#                                                       expiresAt }
-#     PUT <uploadUrl> (binary)                ──►  object storage 직접 업로드
-#     POST /workout-sessions/{id}:save     ─────►  saved=true 확정
-#       body: { objectKey }                          keypoint_frames 영구 보관
-#                                        ◄─────  200 { session }
+#     POST /workout-sessions/{id}:save   ─────────►  서버가 영상 저장
+#       multipart/form-data: { video }                video_url = 서버 저장 경로
+#                                                      saved=true 확정
+#                                        ◄─────  200 { success: true }
 #
 #   "종료" 선택 시 (저장 X):
-#     DELETE /workout-sessions/{id}        ─────►  keypoint_frames 즉시 삭제
-#                                                   (saved=false 라이프사이클)
+#     DELETE /workout-sessions/{id}        ─────►  세션/임시 데이터 삭제
 #                                        ◄─────  204
+#
+# ── 향후 발전 (주석 처리, 미사용) ──────────────────────────────────────
+# 바이트(키포인트) 트래킹 + 얼굴 인식 실시간 파이프라인은 아래 흐름으로 복구한다.
+# 관련 endpoint(:start, /frames)와 스키마는 본문에 주석으로 보존된다.
+#
+#   # POST /workout-sessions/{id}:start  ──►  face_embeddings 매칭 + tracker 초기화
+#   #   body: { faceFrameJpegBase64 }         실패 시 status=aborted
+#   #                                    ◄──  200 { matched } | 422 FACE_*
+#   # loop (15+ FPS, 0.5~2초 배치):
+#   #   POST /workout-sessions/{id}/frames ─►  keypoint_frames bulk insert
+#   #     body: { frames: [...] }            ◄── 202 { accepted, frameErrors? }
 #
 # WebSocket 채택 시 — 본 spec 본문에는 REST 만 유지하고,
 # 파일 끝 부록의 x-websocket 섹션에 메시지 스펙을 별도 정의.
@@ -188,7 +194,7 @@ openapi: 3.1.0
 
 info:
   title: PoseFit API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     AI 기반 운동 자세 분석 및 피드백 서비스의 REST API.
     상세 설계 컨텍스트는 본 파일 상단 주석 (1)(2)(3) 참고.
@@ -1004,76 +1010,82 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-  /workout-sessions/{id}:start:
-    post:
-      tags: [Sessions]
-      operationId: startWorkoutSession
-      summary: 얼굴 매칭 + 트래킹 시작 (EX-03)
-      description: |
-        업로드된 얼굴 프레임을 등록 임베딩과 매칭. 실패 시 세션을 status=aborted 로 전환.
-      parameters:
-        - $ref: '#/components/parameters/SessionId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/StartSessionRequest'
-            example:
-              faceFrameJpegBase64: "/9j/4AAQSkZJRgABAQAAAQABAAD..."
-      responses:
-        '200':
-          description: 매칭 성공 — 트래킹 진입
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StartSessionResponse'
-              example:
-                matched: true
-                trackingStartedAt: "2026-05-26T09:45:03Z"
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          description: |
-            얼굴 인식 실패 — code 로 분기.
-            FACE_NOT_DETECTED / MULTIPLE_FACES_DETECTED / FACE_MISMATCH / FACE_REQUIRED.
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
-              example:
-                type: "https://posefit.app/errors/face-not-detected"
-                title: "Face not detected"
-                status: 422
-                code: "FACE_NOT_DETECTED"
-                detail: "프레임에서 얼굴을 찾을 수 없습니다. 조명을 확인하고 정면을 바라봐 주세요."
-                traceId: "01HF8..."
+  # ─────────────────────────────────────────────────────────────────────────
+  # (향후 발전, 주석 처리) 얼굴 인식 매칭 + 트래킹 시작.
+  # 바이트(키포인트) 트래킹 + 얼굴 인식 실시간 파이프라인 복구 시 사용.
+  # ─────────────────────────────────────────────────────────────────────────
+  # /workout-sessions/{id}:start:
+  #   post:
+  #     tags: [Sessions]
+  #     operationId: startWorkoutSession
+  #     summary: 얼굴 매칭 + 트래킹 시작 (EX-03)
+  #     description: |
+  #       업로드된 얼굴 프레임을 등록 임베딩과 매칭. 실패 시 세션을 status=aborted 로 전환.
+  #     parameters:
+  #       - $ref: '#/components/parameters/SessionId'
+  #     requestBody:
+  #       required: true
+  #       content:
+  #         application/json:
+  #           schema:
+  #             $ref: '#/components/schemas/StartSessionRequest'
+  #           example:
+  #             faceFrameJpegBase64: "/9j/4AAQSkZJRgABAQAAAQABAAD..."
+  #     responses:
+  #       '200':
+  #         description: 매칭 성공 — 트래킹 진입
+  #         content:
+  #           application/json:
+  #             schema:
+  #               $ref: '#/components/schemas/StartSessionResponse'
+  #             example:
+  #               matched: true
+  #               trackingStartedAt: "2026-05-26T09:45:03Z"
+  #       '401':
+  #         $ref: '#/components/responses/Unauthorized'
+  #       '404':
+  #         $ref: '#/components/responses/NotFound'
+  #       '409':
+  #         $ref: '#/components/responses/Conflict'
+  #       '422':
+  #         description: |
+  #           얼굴 인식 실패 — code 로 분기.
+  #           FACE_NOT_DETECTED / MULTIPLE_FACES_DETECTED / FACE_MISMATCH / FACE_REQUIRED.
+  #         content:
+  #           application/problem+json:
+  #             schema:
+  #               $ref: '#/components/schemas/Problem'
+  #             example:
+  #               type: "https://posefit.app/errors/face-not-detected"
+  #               title: "Face not detected"
+  #               status: 422
+  #               code: "FACE_NOT_DETECTED"
+  #               detail: "프레임에서 얼굴을 찾을 수 없습니다. 조명을 확인하고 정면을 바라봐 주세요."
+  #               traceId: "01HF8..."
 
   /workout-sessions/{id}:stop:
     post:
       tags: [Sessions]
       operationId: stopWorkoutSession
-      summary: STOP — 점수 산출 + 피드백 생성 (Q-W4)
+      summary: STOP — 운동 영상 일괄 업로드 + LLM 코멘트 반환 (Q-W4)
       description: |
-        시나리오 B(클라이언트 추론) 이면 body 에 누적 frames 일괄 동봉.
-        시나리오 A 면 body.frames 생략 (서버가 이미 받은 frames 로 산출).
+        운동 종료 시 녹화된 운동 영상 전체를 한 번에 멀티파트로 업로드한다.
+        서버가 영상에서 포즈를 추론·채점하고 RAG/LLM 코칭 코멘트를 생성해 반환한다.
+        세션 status=in_progress 가 아니면 409 SESSION_NOT_IN_PROGRESS.
+
+        # (향후 발전, 주석 처리) 실시간 바이트(키포인트) 트래킹 + 얼굴 인식 매칭
+        # 시나리오는 :start / /frames endpoint 로 복구 가능. 현재는 영상 일괄 업로드만 사용.
       parameters:
         - $ref: '#/components/parameters/SessionId'
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
-              $ref: '#/components/schemas/StopSessionRequest'
-            example:
-              frames: []
+              $ref: '#/components/schemas/StopSessionForm'
       responses:
         '200':
-          description: 완료 — 점수와 피드백 반환
+          description: 완료 — 세션 결과 + LLM 코멘트 반환
           content:
             application/json:
               schema:
@@ -1091,141 +1103,7 @@ paths:
                   holdSec: null
                   saved: false
                   videoUrl: null
-                feedbacks:
-                  - id: 9001
-                    severity: "info"
-                    generatedBy: "rule"
-                    content: "스쿼트 8회 중 6회는 자세가 매우 안정적이었습니다."
-                    createdAt: "2026-05-26T09:47:14Z"
-                  - id: 9002
-                    severity: "warning"
-                    generatedBy: "llm"
-                    content: "3회차에서 무릎이 발끝보다 앞으로 나왔습니다. 무게중심을 뒤꿈치 쪽으로 두세요."
-                    createdAt: "2026-05-26T09:47:14Z"
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-  /workout-sessions/{id}:save:
-    post:
-      tags: [Sessions]
-      operationId: saveWorkoutSession
-      summary: 영상 저장 확정 (EX-12) — saved=true 전환
-      description: |
-        선행 단계: `/workout-sessions/{id}/video:presign` 으로 받은 objectKey 를
-        클라이언트가 직접 PUT 업로드한 뒤 본 endpoint 호출.
-      parameters:
-        - $ref: '#/components/parameters/SessionId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SaveSessionRequest'
-            example: { objectKey: "sessions/50220/video.mp4" }
-      responses:
-        '200':
-          description: 저장 확정
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WorkoutSession'
-              example:
-                id: 50220
-                exercise: { id: 1, nameKo: "스쿼트" }
-                status: "completed"
-                startedAt: "2026-05-26T09:45:00Z"
-                endedAt: "2026-05-26T09:47:14Z"
-                durationSec: 134
-                score: 87.5
-                repCount: 8
-                holdSec: null
-                saved: true
-                videoUrl: "https://media.posefit.app/sessions/50220/video.mp4"
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
-  /workout-sessions/{id}/video:presign:
-    post:
-      tags: [Sessions]
-      operationId: presignVideoUpload
-      summary: 영상 업로드용 presigned URL 발급
-      parameters:
-        - $ref: '#/components/parameters/SessionId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/VideoPresignRequest'
-            example: { contentType: "video/mp4", sizeBytes: 8400000 }
-      responses:
-        '200':
-          description: 발급 완료
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VideoPresignResponse'
-              example:
-                uploadUrl: "https://media.posefit.app.s3.amazonaws.com/sessions/50220/video.mp4?X-Amz-Signature=..."
-                objectKey: "sessions/50220/video.mp4"
-                method: "PUT"
-                headers:
-                  Content-Type: "video/mp4"
-                expiresAt: "2026-05-26T09:50:00Z"
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
-  # ===========================================================================
-  # Frames — SCR-08 (서버 추론 시나리오)
-  # ===========================================================================
-  /workout-sessions/{id}/frames:
-    post:
-      tags: [Frames]
-      operationId: uploadFrames
-      summary: 키포인트 프레임 배치 업로드 (Q-W3, 서버 추론)
-      description: |
-        한 번에 1~2초 분량의 프레임을 묶어 보낸다 (chunked 권장).
-        세션 status=in_progress 가 아니면 409.
-        세션이 saved=false 로 종료될 경우 STOP 직후 frames 는 폐기됨(D-6).
-      parameters:
-        - $ref: '#/components/parameters/SessionId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/FrameBatchRequest'
-            example:
-              frames:
-                - frameIndex: 120
-                  timestampMs: 8000
-                  keypoints: [[0.52, 0.14], [0.51, 0.20]]
-                  bbox: [0.30, 0.04, 0.40, 0.94]
-                - frameIndex: 121
-                  timestampMs: 8067
-                  keypoints: [[0.52, 0.14], [0.51, 0.20]]
-                  bbox: [0.30, 0.04, 0.40, 0.94]
-      responses:
-        '202':
-          description: 수신 완료 (분석은 STOP 시점에 확정)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FrameBatchResponse'
-              example:
-                accepted: 2
-                rejected: 0
+                comment: "스쿼트 8회 중 6회는 자세가 매우 안정적이었습니다. 다만 3회차에서 무릎이 발끝보다 앞으로 나왔으니, 무게중심을 뒤꿈치 쪽으로 두면 더 좋아집니다."
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1236,16 +1114,145 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
+  /workout-sessions/{id}:save:
+    post:
+      tags: [Sessions]
+      operationId: saveWorkoutSession
+      summary: 영상 저장 (EX-12) — 단일 영상 업로드 후 success 반환
+      description: |
+        녹화된 운동 영상 1개를 멀티파트로 직접 업로드한다.
+        서버가 영상을 저장하고, DB(workout_sessions.video_url)에는 **서버상의
+        저장 경로(URL)만** 기록한다. 응답은 성공 여부(success)만 반환한다.
+        세션이 completed 가 아니면 409 SESSION_NOT_COMPLETED.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SaveSessionForm'
+      responses:
+        '200':
+          description: 저장 완료
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveSessionResponse'
+              example: { success: true }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+  # ─────────────────────────────────────────────────────────────────────────
+  # (폐기, 주석 처리) presigned URL 발급 + 클라이언트 직접 PUT 흐름.
+  # v0.3.0 부터 :save 가 영상을 서버로 직접 업로드하므로 미사용.
+  # ─────────────────────────────────────────────────────────────────────────
+  # /workout-sessions/{id}/video:presign:
+  #   post:
+  #     tags: [Sessions]
+  #     operationId: presignVideoUpload
+  #     summary: 영상 업로드용 presigned URL 발급
+  #     parameters:
+  #       - $ref: '#/components/parameters/SessionId'
+  #     requestBody:
+  #       required: true
+  #       content:
+  #         application/json:
+  #           schema:
+  #             $ref: '#/components/schemas/VideoPresignRequest'
+  #           example: { contentType: "video/mp4", sizeBytes: 8400000 }
+  #     responses:
+  #       '200':
+  #         description: 발급 완료
+  #         content:
+  #           application/json:
+  #             schema:
+  #               $ref: '#/components/schemas/VideoPresignResponse'
+  #             example:
+  #               uploadUrl: "https://media.posefit.app.s3.amazonaws.com/sessions/50220/video.mp4?X-Amz-Signature=..."
+  #               objectKey: "sessions/50220/video.mp4"
+  #               method: "PUT"
+  #               headers:
+  #                 Content-Type: "video/mp4"
+  #               expiresAt: "2026-05-26T09:50:00Z"
+  #       '401':
+  #         $ref: '#/components/responses/Unauthorized'
+  #       '404':
+  #         $ref: '#/components/responses/NotFound'
+  #       '422':
+  #         $ref: '#/components/responses/UnprocessableEntity'
+  # ===========================================================================
+  # Frames — SCR-08 (향후 발전, 주석 처리)
+  # 바이트(키포인트) 트래킹 실시간 업로드. 영상 일괄 업로드로 대체되어 미사용.
+  # ===========================================================================
+  # /workout-sessions/{id}/frames:
+  #   post:
+  #     tags: [Frames]
+  #     operationId: uploadFrames
+  #     summary: 키포인트 프레임 배치 업로드 (Q-W3, 서버 추론)
+  #     description: |
+  #       한 번에 1~2초 분량의 프레임을 묶어 보낸다 (chunked 권장).
+  #       세션 status=in_progress 가 아니면 409.
+  #       세션이 saved=false 로 종료될 경우 STOP 직후 frames 는 폐기됨(D-6).
+  #     parameters:
+  #       - $ref: '#/components/parameters/SessionId'
+  #     requestBody:
+  #       required: true
+  #       content:
+  #         application/json:
+  #           schema:
+  #             $ref: '#/components/schemas/FrameBatchRequest'
+  #           example:
+  #             frames:
+  #               - frameIndex: 120
+  #                 timestampMs: 8000
+  #                 keypoints: [[0.52, 0.14], [0.51, 0.20]]
+  #                 bbox: [0.30, 0.04, 0.40, 0.94]
+  #               - frameIndex: 121
+  #                 timestampMs: 8067
+  #                 keypoints: [[0.52, 0.14], [0.51, 0.20]]
+  #                 bbox: [0.30, 0.04, 0.40, 0.94]
+  #     responses:
+  #       '202':
+  #         description: 수신 완료 (분석은 STOP 시점에 확정)
+  #         content:
+  #           application/json:
+  #             schema:
+  #               $ref: '#/components/schemas/FrameBatchResponse'
+  #             example:
+  #               accepted: 2
+  #               rejected: 0
+  #       '400':
+  #         $ref: '#/components/responses/BadRequest'
+  #       '401':
+  #         $ref: '#/components/responses/Unauthorized'
+  #       '404':
+  #         $ref: '#/components/responses/NotFound'
+  #       '409':
+  #         $ref: '#/components/responses/Conflict'
+  #       '422':
+  #         $ref: '#/components/responses/UnprocessableEntity'
   # ===========================================================================
   # Feedbacks — SCR-09
   # ===========================================================================
-  /workout-sessions/{id}/feedbacks:
+  /exercises/{id}/feedbacks:
     get:
       tags: [Feedbacks]
-      operationId: listSessionFeedbacks
-      summary: 세션 피드백 목록 (Q-R10 일부) — id ASC
+      operationId: listExerciseFeedbacks
+      summary: 종목별 당일 피드백 조회 (Q-R10 일부) — 오늘(KST), id ASC
+      description: |
+        지정한 운동 종목(exerciseId)에 대한 **당일(오늘, KST)** 세션 피드백만 조회한다.
+        운동 중 날짜가 바뀌는 경우는 고려하지 않으며, 조회는 "오늘" 조건만 적용한다.
+        정렬은 id ASC.
       parameters:
-        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/ExerciseId'
       responses:
         '200':
           description: OK
@@ -1260,12 +1267,12 @@ paths:
                   severity: "info"
                   generatedBy: "rule"
                   content: "스쿼트 8회 중 6회는 자세가 매우 안정적이었습니다."
-                  createdAt: "2026-05-26T09:47:14Z"
+                  createdAt: "2026-06-17T09:47:14Z"
                 - id: 9002
                   severity: "warning"
                   generatedBy: "llm"
                   content: "3회차에서 무릎이 발끝보다 앞으로 나왔습니다."
-                  createdAt: "2026-05-26T09:47:14Z"
+                  createdAt: "2026-06-17T09:47:14Z"
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1399,6 +1406,56 @@ paths:
                         avgScore: 78.0
                       - date: "2026-05-24"
                         avgScore: 85.5
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /reports/evaluation:
+    get:
+      tags: [Reports]
+      operationId: getComprehensiveEvaluation
+      summary: 종합 평가 (REP-08) — 기관·운동 필터
+      description: |
+        기관(organizationId)과 운동(exerciseId) 필터를 적용한 종합 평가 리포트.
+        두 필터 모두 선택 — 미지정 시 호출자 본인(전체 종목) 기준으로 집계한다.
+
+        [Derived/미확정] `organization`(기관) 은 현재 erd.sql 미존재 개념이다.
+        기관 단위 집계(B2B/단체) 도입 시 organizations 테이블 및 사용자-기관 매핑이
+        필요하다 — 파일 끝 "ERD 갱신 요청" 참고. organizationId 미지정 시 무시된다.
+      parameters:
+        - name: organizationId
+          in: query
+          required: false
+          schema: { type: integer, format: int64 }
+          description: 기관 필터 (Derived — ERD 미존재). 미지정 시 본인 기준 집계.
+          example: 7
+        - name: exerciseId
+          in: query
+          required: false
+          schema: { type: integer, format: int64 }
+          description: 종목 필터. 미지정 시 전체 종목 종합.
+          example: 1
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComprehensiveEvaluationResponse'
+              example:
+                organization: { id: 7, name: "한국체대 트레이닝센터" }
+                exercise: { id: 1, nameKo: "스쿼트" }
+                participantsCount: 24
+                sessionsCount: 318
+                avgScore: 84.7
+                bestScore: 98.5
+                worstScore: 41.2
+                byExercise:
+                  - exercise: { id: 1, nameKo: "스쿼트" }
+                    sessionsCount: 318
+                    avgScore: 84.7
+                comment: "기관 평균 점수는 84.7점으로 안정적입니다. 스쿼트 종목에서 무릎 정렬 오류가 반복적으로 관찰되니 단체 교정 세션을 권장합니다."
         '401':
           $ref: '#/components/responses/Unauthorized'
         '422':
@@ -2604,146 +2661,181 @@ components:
           type: integer
           format: int64
 
-    StartSessionRequest:
+    StopSessionForm:
       type: object
-      description: 얼굴 매칭용 단일 프레임을 base64 로 동봉.
-      required: [faceFrameJpegBase64]
+      description: STOP 시 녹화된 운동 영상 전체를 한 번에 업로드 (multipart/form-data).
+      required: [video]
       properties:
-        faceFrameJpegBase64:
+        video:
           type: string
-          description: data URI 의 base64 본문만(prefix 없이).
-
-    StartSessionResponse:
-      type: object
-      description: 얼굴 매칭 성공 + 트래킹 시작 응답.
-      required: [matched, trackingStartedAt]
-      properties:
-        matched:
-          type: boolean
-        trackingStartedAt:
-          type: string
-          format: date-time
-
-    FrameInput:
-      type: object
-      description: 단일 프레임 입력(클라/서버 추론 공통 입력 형식). erd.sql keypoint_frames 와 1:1.
-      required: [frameIndex, timestampMs, keypoints]
-      properties:
-        frameIndex:
-          type: integer
-          description: 세션 내 프레임 인덱스(0부터 시작).
-        timestampMs:
-          type: integer
-          format: int64
-          description: started_at 기준 경과 ms.
-        keypoints:
-          type: array
-          description: 정규화된 관절 키포인트(0~1).
-          items:
-            type: array
-            items: { type: number }
-            minItems: 2
-            maxItems: 2
-        bbox:
-          type: ["array", "null"]
-          description: "사람 바운딩 박스 [x, y, w, h]. 미검출 시 NULL 허용 (ERD NULL)."
-          items: { type: number }
-          minItems: 4
-          maxItems: 4
-
-    FrameBatchRequest:
-      type: object
-      description: 1~200 프레임의 chunked 배치.
-      required: [frames]
-      properties:
-        frames:
-          type: array
-          items:
-            $ref: '#/components/schemas/FrameInput'
-          minItems: 1
-          maxItems: 200
-
-    FrameBatchResponse:
-      type: object
-      description: 배치 수신 결과. 선택적으로 프레임별 오차 즉시 반환 가능.
-      required: [accepted, rejected]
-      properties:
-        accepted: { type: integer }
-        rejected: { type: integer }
-        frameErrors:
-          type: ["array", "null"]
-          items:
-            type: object
-            required: [frameIndex, error]
-            properties:
-              frameIndex: { type: integer }
-              error: { type: number }
-
-    StopSessionRequest:
-      type: object
-      description: |
-        시나리오 B(클라이언트 추론) 면 누적 frames 일괄 동봉.
-        시나리오 A(서버 추론) 면 frames 생략.
-      properties:
-        frames:
-          type: ["array", "null"]
-          items:
-            $ref: '#/components/schemas/FrameInput'
-          maxItems: 5000
+          format: binary
+          description: 운동 전체 녹화 영상(mp4/webm). 서버가 포즈 추론·채점·코칭에 사용.
 
     StopSessionResponse:
       type: object
-      description: STOP 처리 결과 — 세션 + 피드백 합본.
-      required: [session, feedbacks]
+      description: STOP 처리 결과 — 세션 + RAG/LLM 코칭 comment.
+      required: [session, comment]
       properties:
         session:
           $ref: '#/components/schemas/WorkoutSession'
-        feedbacks:
-          type: array
-          items:
-            $ref: '#/components/schemas/Feedback'
-    SaveSessionRequest:
-      type: object
-      description: presign 응답의 objectKey 를 그대로 전달.
-      required: [objectKey]
-      properties:
-        objectKey:
+        comment:
           type: string
+          description: 업로드된 운동 영상 분석으로 RAG/LLM 이 생성한 종합 코칭 코멘트.
 
-    VideoPresignRequest:
+    SaveSessionForm:
       type: object
-      description: 영상 업로드 presigned URL 발급 요청.
-      required: [contentType, sizeBytes]
+      description: 영상 저장 시 운동 영상 1개를 업로드 (multipart/form-data).
+      required: [video]
       properties:
-        contentType:
+        video:
           type: string
-          enum: ["video/mp4", "video/webm"]
-        sizeBytes:
-          type: integer
-          format: int64
-          maximum: 524288000
-          description: 최대 500MB.
+          format: binary
+          description: 저장할 운동 녹화 영상(mp4/webm). 서버 저장 후 경로만 DB 에 기록.
 
-    VideoPresignResponse:
+    SaveSessionResponse:
       type: object
-      description: presigned URL 발급 결과.
-      required: [uploadUrl, objectKey, method, expiresAt]
+      description: 영상 저장 결과 — 성공 여부만 반환.
+      required: [success]
       properties:
-        uploadUrl:
-          type: string
-          format: uri
-        objectKey:
-          type: string
-        method:
-          type: string
-          enum: [PUT]
-        headers:
-          type: object
-          additionalProperties: { type: string }
-          description: "PUT 시 함께 보내야 하는 헤더(예: Content-Type)."
-        expiresAt:
-          type: string
-          format: date-time
+        success:
+          type: boolean
+
+    # ─────────────────────────────────────────────────────────────────────
+    # (향후 발전, 주석 처리) 바이트(키포인트) 트래킹 + 얼굴 인식 스키마.
+    # :start / /frames 실시간 파이프라인 복구 시 함께 활성화한다.
+    # ─────────────────────────────────────────────────────────────────────
+    # StartSessionRequest:
+    #   type: object
+    #   description: 얼굴 매칭용 단일 프레임을 base64 로 동봉.
+    #   required: [faceFrameJpegBase64]
+    #   properties:
+    #     faceFrameJpegBase64:
+    #       type: string
+    #       description: data URI 의 base64 본문만(prefix 없이).
+    #
+    # StartSessionResponse:
+    #   type: object
+    #   description: 얼굴 매칭 성공 + 트래킹 시작 응답.
+    #   required: [matched, trackingStartedAt]
+    #   properties:
+    #     matched:
+    #       type: boolean
+    #     trackingStartedAt:
+    #       type: string
+    #       format: date-time
+    #
+    # FrameInput:
+    #   type: object
+    #   description: 단일 프레임 입력(클라/서버 추론 공통 입력 형식). erd.sql keypoint_frames 와 1:1.
+    #   required: [frameIndex, timestampMs, keypoints]
+    #   properties:
+    #     frameIndex:
+    #       type: integer
+    #       description: 세션 내 프레임 인덱스(0부터 시작).
+    #     timestampMs:
+    #       type: integer
+    #       format: int64
+    #       description: started_at 기준 경과 ms.
+    #     keypoints:
+    #       type: array
+    #       description: 정규화된 관절 키포인트(0~1).
+    #       items:
+    #         type: array
+    #         items: { type: number }
+    #         minItems: 2
+    #         maxItems: 2
+    #     bbox:
+    #       type: ["array", "null"]
+    #       description: "사람 바운딩 박스 [x, y, w, h]. 미검출 시 NULL 허용 (ERD NULL)."
+    #       items: { type: number }
+    #       minItems: 4
+    #       maxItems: 4
+    #
+    # FrameBatchRequest:
+    #   type: object
+    #   description: 1~200 프레임의 chunked 배치.
+    #   required: [frames]
+    #   properties:
+    #     frames:
+    #       type: array
+    #       items:
+    #         $ref: '#/components/schemas/FrameInput'
+    #       minItems: 1
+    #       maxItems: 200
+    #
+    # FrameBatchResponse:
+    #   type: object
+    #   description: 배치 수신 결과. 선택적으로 프레임별 오차 즉시 반환 가능.
+    #   required: [accepted, rejected]
+    #   properties:
+    #     accepted: { type: integer }
+    #     rejected: { type: integer }
+    #     frameErrors:
+    #       type: ["array", "null"]
+    #       items:
+    #         type: object
+    #         required: [frameIndex, error]
+    #         properties:
+    #           frameIndex: { type: integer }
+    #           error: { type: number }
+    #
+    # StopSessionRequest:
+    #   type: object
+    #   description: |
+    #     시나리오 B(클라이언트 추론) 면 누적 frames 일괄 동봉.
+    #     시나리오 A(서버 추론) 면 frames 생략.
+    #   properties:
+    #     frames:
+    #       type: ["array", "null"]
+    #       items:
+    #         $ref: '#/components/schemas/FrameInput'
+    #       maxItems: 5000
+    #
+    # ─────────────────────────────────────────────────────────────────────
+    # (폐기, 주석 처리) presigned URL 업로드 스키마 — :save 직접 업로드로 대체.
+    # ─────────────────────────────────────────────────────────────────────
+    # SaveSessionRequest:
+    #   type: object
+    #   description: presign 응답의 objectKey 를 그대로 전달.
+    #   required: [objectKey]
+    #   properties:
+    #     objectKey:
+    #       type: string
+    #
+    # VideoPresignRequest:
+    #   type: object
+    #   description: 영상 업로드 presigned URL 발급 요청.
+    #   required: [contentType, sizeBytes]
+    #   properties:
+    #     contentType:
+    #       type: string
+    #       enum: ["video/mp4", "video/webm"]
+    #     sizeBytes:
+    #       type: integer
+    #       format: int64
+    #       maximum: 524288000
+    #       description: 최대 500MB.
+    #
+    # VideoPresignResponse:
+    #   type: object
+    #   description: presigned URL 발급 결과.
+    #   required: [uploadUrl, objectKey, method, expiresAt]
+    #   properties:
+    #     uploadUrl:
+    #       type: string
+    #       format: uri
+    #     objectKey:
+    #       type: string
+    #     method:
+    #       type: string
+    #       enum: [PUT]
+    #     headers:
+    #       type: object
+    #       additionalProperties: { type: string }
+    #       description: "PUT 시 함께 보내야 하는 헤더(예: Content-Type)."
+    #     expiresAt:
+    #       type: string
+    #       format: date-time
 
     # ---- Feedback ---------------------------------------------------------
     Feedback:
@@ -2860,6 +2952,59 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ScoreTrendSeries'
+
+    ComprehensiveEvaluationResponse:
+      type: object
+      description: |
+        기관(organizationId)·운동(exerciseId) 필터를 적용한 종합 평가.
+        workout_sessions / workout_daily_stats 집계.
+        organization 은 ERD 미존재 개념(Derived) — 미지정 시 NULL.
+      required: [sessionsCount, avgScore, byExercise]
+      properties:
+        organization:
+          type: ["object", "null"]
+          description: 기관 요약 (Derived — ERD 미존재). organizationId 미지정 시 NULL.
+          required: [id, name]
+          properties:
+            id: { type: integer, format: int64 }
+            name: { type: string }
+        exercise:
+          description: 종목 필터 지정 시 해당 종목, 미지정(전체 종합) 시 NULL.
+          anyOf:
+            - $ref: '#/components/schemas/EmbeddedExercise'
+            - type: "null"
+        participantsCount:
+          type: ["integer", "null"]
+          description: 집계 대상 인원 수. organizationId 미지정(본인 기준) 시 NULL 또는 1.
+        sessionsCount:
+          type: integer
+          description: 집계 범위 내 completed 세션 수.
+        avgScore:
+          type: ["number", "null"]
+          description: 평균 점수 (DECIMAL(5,2)). 데이터 없으면 NULL.
+        bestScore:
+          type: ["number", "null"]
+          description: 최고 점수 (DECIMAL(5,2)).
+        worstScore:
+          type: ["number", "null"]
+          description: 최저 점수 (DECIMAL(5,2)).
+        byExercise:
+          type: array
+          description: 종목별 평가 분해. exerciseId 지정 시 1개, 미지정 시 전체 종목.
+          items:
+            type: object
+            required: [exercise, sessionsCount, avgScore]
+            properties:
+              exercise:
+                $ref: '#/components/schemas/EmbeddedExercise'
+              sessionsCount:
+                type: integer
+              avgScore:
+                type: ["number", "null"]
+                description: DECIMAL(5,2).
+        comment:
+          type: ["string", "null"]
+          description: RAG/LLM 이 생성한 종합 평가 코멘트.
 
     # =========================================================================
     # Admin schemas (운영 도구) — 응답 필드는 admin_accounts/llm_models/
@@ -3152,7 +3297,11 @@ components:
 # =============================================================================
 # ERD 갱신 요청 (있다면)
 # =============================================================================
-# 현재 시점에 ERD 갱신 요청 사항 없음 (v0.2.0 에서 spec 쪽을 erd.sql 에 맞춰 정렬).
+# v0.3.0 — 종합 평가(GET /reports/evaluation)의 기관(organization) 단위 집계
+# 도입 검토 필요. 현재 erd.sql 에 기관 개념이 없으므로 다음이 선행돼야 한다:
+#   - organizations 테이블 (id, name 등)
+#   - 사용자-기관 매핑 (users.organization_id 또는 별도 매핑 테이블)
+#   → 미도입 상태에서는 organizationId 필터를 무시하고 본인 기준으로 집계한다.
 #
 # 단, 아래 2건은 "ERD 미저장이 의도"인지 다음 회의에서 확인 권장:
 #   - 정답 키포인트 시퀀스 (GET /exercises/{id}/reference-keypoints)
