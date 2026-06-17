@@ -1,4 +1,4 @@
-# face-recognition (dlib) 시스템 의존성 설치 스크립트 (Windows)
+﻿# face-recognition (dlib) 시스템 의존성 설치 스크립트 (Windows)
 #
 # 실행 방법 (PowerShell 관리자 권한):
 #   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
