@@ -1,6 +1,7 @@
 export interface StopSessionApiResult {
   videoUrl: string;
   comment: string;
+  score: number | null;
 }
 
 /**

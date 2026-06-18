@@ -10,3 +10,4 @@ class StopSessionResponse(CamelModel):
     """POST /workout-sessions:stop 응답 — 저장된 영상 URL + LLM 코멘트."""
     video_url: str
     comment: str
+    score: float | None = None

@@ -30,8 +30,9 @@ import {
   callStopSession,
   type StopSessionApiResult,
 } from "@/lib/api/workout-session";
+import { logVideoFile } from "./actions";
 
-type Phase = "idle" | "recognizing" | "tracking" | "result";
+type Phase = "idle" | "countdown" | "recognizing" | "tracking" | "result";
 
 /** mm:ss */
 function clock(totalSec: number): string {
@@ -79,16 +80,24 @@ export function WorkoutLive({
   const [hold, setHold] = useState(0);
   const [liveScore, setLiveScore] = useState<number | null>(null);
 
+  const [countdown, setCountdown] = useState(0);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoFilename, setVideoFilename] = useState<string | null>(null);
+
   // 추적 시작 시각 — STOP 시 startAt 파라미터로 사용
   const startedAtRef = useRef<Date | null>(null);
-  // 녹화 모듈 연동 지점 — 녹화 모듈이 완성되면 이 ref에 File을 설정한다
-  const recordedVideoRef = useRef<File | null>(null);
 
   const [stopResult, setStopResult] = useState<StopSessionApiResult | null>(null);
   const [stopError, setStopError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [stopping, startStop] = useTransition();
   const [savingPending, startSave] = useTransition();
+
+  useEffect(() => {
+    return () => {
+      if (videoUrl) URL.revokeObjectURL(videoUrl);
+    };
+  }, [videoUrl]);
 
   // SCR-07 createSession 결과(id)로 세션 객체를 재구성한다(실제로는 세션 상세를 받아온다).
   const [session, setSession] = useState<WorkoutSession>(() => ({
@@ -122,17 +131,29 @@ export function WorkoutLive({
 
   async function handleStart() {
     setRecognitionError(null);
+
+    // 5초 카운트다운
+    setPhase("countdown");
+    for (let i = 5; i >= 1; i--) {
+      setCountdown(i);
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    setCountdown(0);
+
+    // 얼굴 인식
     setPhase("recognizing");
-    // 연결 지점: 얼굴 프레임을 캡처해 :start 로 등록 임베딩과 매칭한다.
     await cameraRef.current?.capture();
     const result = await startSession(session.id);
-    await new Promise((r) => setTimeout(r, 1200)); // 인식 시간 시뮬
+    await new Promise((r) => setTimeout(r, 1200));
     if (!result.matched) {
       setRecognitionError(messageFor(result.reason));
       setPhase("idle");
       return;
     }
+
+    // 녹화 시작 후 추적 전환
     startedAtRef.current = new Date();
+    cameraRef.current?.startRecording();
     setPhase("tracking");
   }
 
@@ -142,14 +163,19 @@ export function WorkoutLive({
       const endAt = new Date();
       const startAt = startedAtRef.current ?? new Date(Date.now() - elapsed * 1000);
 
-      // 녹화 모듈 연동 — 모듈 완성 전에는 null 이므로 조기 차단
-      const videoFile = recordedVideoRef.current;
-      if (!videoFile) {
-        setStopError("녹화된 영상이 없어요. 녹화 모듈 연동 후 다시 시도해 주세요.");
+      const recorded = await cameraRef.current?.stopRecording() ?? null;
+      if (!recorded) {
+        setStopError("녹화된 영상이 없어요. 다시 시도해 주세요.");
         return;
       }
 
+      setVideoFilename(recorded.filename);
+      const url = URL.createObjectURL(recorded.blob);
+      setVideoUrl(url);
+      await logVideoFile(recorded.filename, recorded.blob.size);
+
       // Form 필드명은 백엔드 Python 파라미터명(snake_case)과 일치시킨다
+      const videoFile = new File([recorded.blob], recorded.filename, { type: "video/webm" });
       const formData = new FormData();
       formData.append("exercise_id", String(exercise.id));
       formData.append("start_at", startAt.toISOString());
@@ -199,9 +225,9 @@ export function WorkoutLive({
           {/* 좌측 — 녹화 미리보기 + 점수 */}
           <div className="flex flex-col gap-4">
             <div className="overflow-hidden rounded-md border border-border">
-              {stopResult?.videoUrl ? (
+              {videoUrl ?? stopResult?.videoUrl ? (
                 <video
-                  src={stopResult.videoUrl}
+                  src={videoUrl ?? stopResult?.videoUrl ?? undefined}
                   controls
                   className="aspect-video w-full object-cover"
                 />
@@ -217,7 +243,7 @@ export function WorkoutLive({
               <CardBody className="py-6 text-center">
                 <p className="font-mono text-xs text-text-subtle">SCORE</p>
                 <p className="mt-1 font-mono text-5xl font-semibold tabular-nums">
-                  {session.score != null ? formatScore(session.score) : "—"}
+                  {stopResult.score != null ? formatScore(stopResult.score) : "—"}
                   <span className="ml-1 text-xl font-normal text-text-subtle">
                     /100
                   </span>
@@ -340,7 +366,7 @@ export function WorkoutLive({
         <CameraView
           ref={cameraRef}
           onPermissionChange={setPermission}
-          overlay={<CameraOverlay phase={phase} />}
+          overlay={<CameraOverlay phase={phase} countdown={countdown} />}
           className="aspect-video w-full"
         />
 
@@ -371,24 +397,30 @@ export function WorkoutLive({
             <button
               type="button"
               onClick={handleStart}
-              disabled={!granted || phase === "recognizing"}
+              disabled={!granted || phase === "recognizing" || phase === "countdown"}
               className="mt-1 flex w-full items-center justify-center gap-2 rounded-md bg-accent py-5 text-lg font-semibold text-white transition-colors duration-150 ease-out hover:bg-accent-hover disabled:opacity-50 [&_svg]:size-5"
             >
               {phase === "recognizing" ? (
                 <Loader2 className="animate-spin" aria-hidden />
+              ) : phase === "countdown" ? (
+                <span className="font-mono text-2xl font-black leading-none">
+                  {countdown}
+                </span>
               ) : (
                 <Play aria-hidden />
               )}
-              START
+              {phase === "countdown" ? `${countdown}초 후 시작` : "START"}
             </button>
           )}
 
           <p className="text-center text-xs text-text-subtle">
             {phase === "tracking"
               ? "STOP을 누르면 분석을 마치고 결과를 보여줘요"
-              : !granted
-                ? "카메라 권한을 허용해 주세요"
-                : "START → 얼굴 인식 후 분석을 시작해요"}
+              : phase === "countdown"
+                ? "카메라를 바라보고 준비해 주세요"
+                : !granted
+                  ? "카메라 권한을 허용해 주세요"
+                  : "START → 얼굴 인식 후 분석을 시작해요"}
           </p>
         </div>
       </div>
@@ -421,7 +453,21 @@ function StatCard({
 }
 
 /* 카메라 위 가이드 오버레이 — 권한 허용(영상 표시) 상태에서만 렌더된다 */
-function CameraOverlay({ phase }: { phase: Phase }) {
+function CameraOverlay({ phase, countdown }: { phase: Phase; countdown: number }) {
+  if (phase === "countdown") {
+    return (
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/60">
+        <div className="flex flex-col items-center gap-3">
+          <span className="font-mono text-[9rem] font-black leading-none text-white drop-shadow-[0_0_40px_rgba(255,255,255,0.5)]">
+            {countdown}
+          </span>
+          <span className="rounded-full border border-white/30 px-4 py-1 text-sm font-medium tracking-widest text-white/80 uppercase">
+            준비
+          </span>
+        </div>
+      </div>
+    );
+  }
   if (phase === "recognizing") {
     return (
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/55">
