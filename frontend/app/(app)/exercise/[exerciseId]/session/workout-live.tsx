@@ -21,12 +21,14 @@ import { formatScore } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { ExerciseDetailResponse } from "@/lib/api/exercises";
 import {
-  saveSession,
   startSession,
   type FaceMatchFailure,
   type WorkoutSession,
 } from "@/lib/mock/workout-session";
 import {
+  callDiscardSession,
+  callNextSession,
+  callSaveSession,
   callStopSession,
   type StopSessionApiResult,
 } from "@/lib/api/workout-session";
@@ -92,6 +94,7 @@ export function WorkoutLive({
   const [saved, setSaved] = useState(false);
   const [stopping, startStop] = useTransition();
   const [savingPending, startSave] = useTransition();
+  const [nextPending, startNext] = useTransition();
 
   useEffect(() => {
     return () => {
@@ -187,6 +190,7 @@ export function WorkoutLive({
         setStopResult(res);
         setSession((prev) => ({
           ...prev,
+          id: res.sessionId,
           status: "completed",
           endedAt: endAt.toISOString(),
           durationSec: elapsed,
@@ -204,9 +208,45 @@ export function WorkoutLive({
 
   function handleSave() {
     startSave(async () => {
-      const updated = await saveSession(session);
-      setSession(updated);
+      await callSaveSession(session.id);
       setSaved(true);
+    });
+  }
+
+  function handleDiscard() {
+    startStop(async () => {
+      await callDiscardSession(session.id).catch(() => null);
+      router.push("/dashboard");
+    });
+  }
+
+  function handleNext() {
+    startNext(async () => {
+      const result = await callNextSession(session.id);
+      setSession((prev) => ({
+        ...prev,
+        id: result.id,
+        status: "in_progress",
+        startedAt: new Date().toISOString(),
+        endedAt: null,
+        durationSec: null,
+        score: null,
+        repCount: null,
+        holdSec: null,
+        saved: false,
+        videoUrl: null,
+      }));
+      setElapsed(0);
+      setReps(0);
+      setHold(0);
+      setLiveScore(null);
+      if (videoUrl) URL.revokeObjectURL(videoUrl);
+      setVideoUrl(null);
+      setVideoFilename(null);
+      setStopResult(null);
+      setStopError(null);
+      setSaved(false);
+      setPhase("idle");
     });
   }
 
@@ -273,50 +313,44 @@ export function WorkoutLive({
               </CardBody>
             </Card>
 
-            {saved ? (
-              <div className="space-y-3">
-                <p className="text-sm text-success">
-                  영상을 저장했어요. 리포트에서 다시 볼 수 있어요.
-                </p>
-                <div className="flex gap-3">
-                  <Link
-                    href="/reports"
-                    className={buttonClasses("secondary", "md", "flex-1")}
-                  >
-                    리포트에서 보기
-                  </Link>
-                  <Link
-                    href="/dashboard"
-                    className={buttonClasses("primary", "md", "flex-1")}
-                  >
-                    완료
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-2">
+            <div className="space-y-2">
                 <div className="flex gap-3">
                   <Button
                     variant="secondary"
                     className="flex-1"
-                    disabled={savingPending}
-                    onClick={() => router.push("/dashboard")}
+                    disabled={savingPending || nextPending}
+                    onClick={handleDiscard}
                   >
                     종료
                   </Button>
                   <Button
+                    variant="secondary"
+                    className="flex-1"
+                    loading={nextPending}
+                    disabled={savingPending}
+                    onClick={handleNext}
+                  >
+                    다음 세트
+                  </Button>
+                  <Button
                     className="flex-1"
                     loading={savingPending}
+                    disabled={saved || nextPending}
                     onClick={handleSave}
                   >
-                    영상 저장
+                    {saved ? "저장됨" : "영상 저장"}
                   </Button>
                 </div>
-                <p className="text-center text-xs text-text-subtle">
-                  저장하지 않으면 영상은 즉시 폐기돼요
-                </p>
+                {saved ? (
+                  <p className="text-center text-xs text-success">
+                    영상을 저장했어요. 리포트에서 다시 볼 수 있어요.
+                  </p>
+                ) : (
+                  <p className="text-center text-xs text-text-subtle">
+                    저장하지 않으면 영상은 즉시 폐기돼요
+                  </p>
+                )}
               </div>
-            )}
           </div>
         </div>
       </div>

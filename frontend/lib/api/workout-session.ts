@@ -1,7 +1,14 @@
 export interface StopSessionApiResult {
+  sessionId: number;
   videoUrl: string;
   comment: string;
   score: number | null;
+}
+
+export interface NextSessionApiResult {
+  id: number;
+  exerciseId: number;
+  status: string;
 }
 
 /**
@@ -35,4 +42,49 @@ export async function callStopSession(
   }
 
   return body as StopSessionApiResult;
+}
+
+export async function callSaveSession(sessionId: number): Promise<void> {
+  const res = await fetch(`/api/workout-sessions/${sessionId}/save`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const detail =
+      body && typeof body === "object" && "detail" in body
+        ? String((body as { detail: unknown }).detail)
+        : `영상 저장 실패 (${res.status})`;
+    throw new Error(detail);
+  }
+}
+
+export async function callDiscardSession(sessionId: number): Promise<void> {
+  const res = await fetch(`/api/workout-sessions/${sessionId}/discard`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const detail =
+      body && typeof body === "object" && "detail" in body
+        ? String((body as { detail: unknown }).detail)
+        : `세션 폐기 실패 (${res.status})`;
+    throw new Error(detail);
+  }
+}
+
+export async function callNextSession(
+  sessionId: number,
+): Promise<NextSessionApiResult> {
+  const res = await fetch(`/api/workout-sessions/${sessionId}/next`, {
+    method: "POST",
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const detail =
+      body && typeof body === "object" && "detail" in body
+        ? String((body as { detail: unknown }).detail)
+        : `다음 세트 시작 실패 (${res.status})`;
+    throw new Error(detail);
+  }
+  return body as NextSessionApiResult;
 }
