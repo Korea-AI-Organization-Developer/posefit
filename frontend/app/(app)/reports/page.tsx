@@ -1,13 +1,8 @@
 import type { Metadata } from "next";
 
 import { Card, CardBody, CardHeader } from "@/components/ui";
-import { getExercises } from "@/lib/mock/exercises";
-import {
-  getReportSummary,
-  getScoreTrend,
-  type ReportPeriod,
-  type TrendDays,
-} from "@/lib/mock/reports";
+import { getExercises } from "@/lib/api/exercises";
+import { getReportSummary, getScoreTrend, type ReportPeriod, type TrendDays } from "@/lib/api/reports";
 import { getWorkoutSessions } from "@/lib/mock/workout-sessions";
 import { OverviewDialog } from "./overview-dialog";
 import { QueryTabs } from "./query-tabs";
