@@ -26,7 +26,6 @@ import {
 } from "@/lib/mock/workout-session";
 import {
   callDiscardSession,
-  callNextSession,
   callSaveSession,
   callStopSession,
   type StopSessionApiResult,
@@ -97,7 +96,6 @@ export function WorkoutLive({
   const [saved, setSaved] = useState(false);
   const [stopping, startStop] = useTransition();
   const [savingPending, startSave] = useTransition();
-  const [nextPending, startNext] = useTransition();
 
   useEffect(() => {
     return () => {
@@ -230,32 +228,17 @@ export function WorkoutLive({
   }
 
   function handleNext() {
-    startNext(async () => {
-      const result = await callNextSession(session.id);
-      setSession((prev) => ({
-        ...prev,
-        id: result.id,
-        status: "in_progress",
-        startedAt: new Date().toISOString(),
-        endedAt: null,
-        durationSec: null,
-        score: null,
-        repCount: null,
-        holdSec: null,
-        saved: false,
-        videoUrl: null,
-      }));
-      setElapsed(0);
-      setReps(0);
-      setHold(0);
-      setLiveScore(null);
-      if (videoUrl) URL.revokeObjectURL(videoUrl);
-      setVideoUrl(null);
-      setStopResult(null);
-      setStopError(null);
-      setSaved(false);
-      setPhase("idle");
-    });
+    callDiscardSession(session.id).catch(() => null);
+    if (videoUrl) URL.revokeObjectURL(videoUrl);
+    setElapsed(0);
+    setReps(0);
+    setHold(0);
+    setLiveScore(null);
+    setVideoUrl(null);
+    setStopResult(null);
+    setStopError(null);
+    setSaved(false);
+    setPhase("idle");
   }
 
   // ─── SCR-09 결과 ──────────────────────────────────────────────────────────
@@ -356,7 +339,7 @@ export function WorkoutLive({
                   <Button
                     variant="secondary"
                     className="flex-1"
-                    disabled={savingPending || nextPending}
+                    disabled={savingPending}
                     onClick={handleDiscard}
                   >
                     종료
@@ -364,7 +347,6 @@ export function WorkoutLive({
                   <Button
                     variant="secondary"
                     className="flex-1"
-                    loading={nextPending}
                     disabled={savingPending}
                     onClick={handleNext}
                   >
@@ -373,7 +355,7 @@ export function WorkoutLive({
                   <Button
                     className="flex-1"
                     loading={savingPending}
-                    disabled={saved || nextPending}
+                    disabled={saved}
                     onClick={handleSave}
                   >
                     {saved ? "저장됨" : "영상 저장"}
