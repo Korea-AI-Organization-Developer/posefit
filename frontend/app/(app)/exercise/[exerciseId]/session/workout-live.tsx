@@ -6,13 +6,11 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { ArrowLeft, Loader2, Play, Square } from "lucide-react";
 
 import {
-  Badge,
   Button,
   buttonClasses,
   Card,
   CardBody,
   CardHeader,
-  type BadgeTone,
 } from "@/components/ui";
 import {
   CameraView,
@@ -25,20 +23,15 @@ import type { ExerciseDetailResponse } from "@/lib/api/exercises";
 import {
   saveSession,
   startSession,
-  stopSession,
   type FaceMatchFailure,
-  type FeedbackSeverity,
-  type StopSessionResult,
   type WorkoutSession,
 } from "@/lib/mock/workout-session";
+import {
+  callStopSession,
+  type StopSessionApiResult,
+} from "@/lib/api/workout-session";
 
 type Phase = "idle" | "recognizing" | "tracking" | "result";
-
-const SEVERITY: Record<FeedbackSeverity, { tone: BadgeTone; label: string }> = {
-  info: { tone: "neutral", label: "정보" },
-  warning: { tone: "warning", label: "주의" },
-  critical: { tone: "danger", label: "위험" },
-};
 
 /** mm:ss */
 function clock(totalSec: number): string {
@@ -86,7 +79,13 @@ export function WorkoutLive({
   const [hold, setHold] = useState(0);
   const [liveScore, setLiveScore] = useState<number | null>(null);
 
-  const [stopResult, setStopResult] = useState<StopSessionResult | null>(null);
+  // 추적 시작 시각 — STOP 시 startAt 파라미터로 사용
+  const startedAtRef = useRef<Date | null>(null);
+  // 녹화 모듈 연동 지점 — 녹화 모듈이 완성되면 이 ref에 File을 설정한다
+  const recordedVideoRef = useRef<File | null>(null);
+
+  const [stopResult, setStopResult] = useState<StopSessionApiResult | null>(null);
+  const [stopError, setStopError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [stopping, startStop] = useTransition();
   const [savingPending, startSave] = useTransition();
@@ -133,19 +132,47 @@ export function WorkoutLive({
       setPhase("idle");
       return;
     }
+    startedAtRef.current = new Date();
     setPhase("tracking");
   }
 
   function handleStop() {
     startStop(async () => {
-      const res = await stopSession(session, {
-        durationSec: elapsed,
-        repCount: isDynamic ? reps : null,
-        holdSec: isDynamic ? null : hold,
-      });
-      setStopResult(res);
-      setSession(res.session);
-      setPhase("result");
+      setStopError(null);
+      const endAt = new Date();
+      const startAt = startedAtRef.current ?? new Date(Date.now() - elapsed * 1000);
+
+      // 녹화 모듈 연동 — 모듈 완성 전에는 null 이므로 조기 차단
+      const videoFile = recordedVideoRef.current;
+      if (!videoFile) {
+        setStopError("녹화된 영상이 없어요. 녹화 모듈 연동 후 다시 시도해 주세요.");
+        return;
+      }
+
+      // Form 필드명은 백엔드 Python 파라미터명(snake_case)과 일치시킨다
+      const formData = new FormData();
+      formData.append("exercise_id", String(exercise.id));
+      formData.append("start_at", startAt.toISOString());
+      formData.append("end_at", endAt.toISOString());
+      formData.append("video", videoFile);
+
+      try {
+        const res = await callStopSession(formData);
+        setStopResult(res);
+        setSession((prev) => ({
+          ...prev,
+          status: "completed",
+          endedAt: endAt.toISOString(),
+          durationSec: elapsed,
+          repCount: isDynamic ? reps : null,
+          holdSec: isDynamic ? null : hold,
+        }));
+        setPhase("result");
+      } catch (e) {
+        setStopError(
+          e instanceof Error ? e.message : "운동 종료 중 오류가 발생했어요.",
+        );
+      }
     });
   }
 
@@ -169,14 +196,21 @@ export function WorkoutLive({
         </header>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-2">
-          {/* 좌측 — 녹화 미리보기(시뮬) + 점수 */}
+          {/* 좌측 — 녹화 미리보기 + 점수 */}
           <div className="flex flex-col gap-4">
             <div className="overflow-hidden rounded-md border border-border">
-              {/* 시뮬: 실제 녹화 영상은 저장 시 오브젝트 스토리지에서 스트리밍한다 */}
-              <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 bg-surface-muted">
-                <Play className="size-8 text-text-subtle" aria-hidden />
-                <p className="text-xs text-text-subtle">녹화된 운동 영상</p>
-              </div>
+              {stopResult?.videoUrl ? (
+                <video
+                  src={stopResult.videoUrl}
+                  controls
+                  className="aspect-video w-full object-cover"
+                />
+              ) : (
+                <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 bg-surface-muted">
+                  <Play className="size-8 text-text-subtle" aria-hidden />
+                  <p className="text-xs text-text-subtle">녹화된 운동 영상</p>
+                </div>
+              )}
             </div>
 
             <Card>
@@ -198,28 +232,18 @@ export function WorkoutLive({
             </Card>
           </div>
 
-          {/* 우측 — AI 피드백 + 저장/종료 */}
+          {/* 우측 — AI 코멘트 + 저장/종료 */}
           <div className="flex flex-col gap-4">
             <Card className="flex-1">
               <CardHeader>
-                <h2 className="text-sm font-semibold">AI 피드백</h2>
+                <h2 className="text-sm font-semibold">AI 코멘트</h2>
               </CardHeader>
-              <CardBody className="p-0">
-                <ul className="divide-y divide-border">
-                  {stopResult.feedbacks.map((f) => (
-                    <li key={f.id} className="flex gap-3 px-6 py-3">
-                      <Badge tone={SEVERITY[f.severity].tone} className="shrink-0">
-                        {SEVERITY[f.severity].label}
-                      </Badge>
-                      <div className="min-w-0">
-                        <p className="text-sm">{f.content}</p>
-                        <p className="mt-0.5 text-xs text-text-subtle">
-                          {f.generatedBy === "llm" ? "AI 분석" : "규칙 기반"}
-                        </p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+              <CardBody>
+                {stopResult?.comment ? (
+                  <p className="text-sm leading-relaxed">{stopResult.comment}</p>
+                ) : (
+                  <p className="text-sm text-text-subtle">코멘트가 없어요.</p>
+                )}
               </CardBody>
             </Card>
 
@@ -304,6 +328,11 @@ export function WorkoutLive({
       {recognitionError && (
         <p className="mt-4 rounded-sm bg-warning-soft px-3 py-2 text-sm text-warning">
           {recognitionError}
+        </p>
+      )}
+      {stopError && (
+        <p className="mt-4 rounded-sm bg-danger-soft px-3 py-2 text-sm text-danger">
+          {stopError}
         </p>
       )}
 
