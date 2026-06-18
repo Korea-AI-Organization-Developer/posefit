@@ -4,7 +4,7 @@ import { Pagination } from "@/components/pagination";
 import { Badge, Table, THead, TBody, TR, TH, TD } from "@/components/ui";
 import { USER_STATUS_LABEL, USER_STATUS_TONE } from "@/lib/labels";
 import { formatDate } from "@/lib/format";
-import { listUsers } from "@/lib/mock/admin-api";
+import { listUsers } from "@/lib/api/admin-users";
 import type { UserStatus } from "@/lib/api/types";
 import { UsersFilter } from "./users-filter";
 
