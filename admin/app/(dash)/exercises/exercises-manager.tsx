@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 
 import { Dialog } from "@/components/ui/dialog";
@@ -15,6 +16,7 @@ import {
   TH,
   TD,
 } from "@/components/ui";
+import { buttonClasses } from "@/components/ui/button";
 import { EXERCISE_TYPE_LABEL } from "@/lib/labels";
 import type { AdminExercise, ExerciseType } from "@/lib/api/types";
 
@@ -23,6 +25,7 @@ type Draft = {
   nameEn: string;
   exerciseType: ExerciseType;
   referenceVideoUrl: string;
+  isActive: boolean;
 };
 
 const EMPTY: Draft = {
@@ -30,21 +33,22 @@ const EMPTY: Draft = {
   nameEn: "",
   exerciseType: "dynamic",
   referenceVideoUrl: "",
+  isActive: false,
 };
 
-/*
- * 운동 종목 관리 — mock 단계라 로컬 상태로 동작.
- * 백엔드 연동 시: POST/PATCH /admin/exercises 호출 후 router.refresh().
- */
 export function ExercisesManager({ initial }: { initial: AdminExercise[] }) {
+  const router = useRouter();
   const [items, setItems] = useState(initial);
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function openCreate() {
     setEditId(null);
     setDraft(EMPTY);
+    setError(null);
     setOpen(true);
   }
 
@@ -55,46 +59,59 @@ export function ExercisesManager({ initial }: { initial: AdminExercise[] }) {
       nameEn: ex.nameEn ?? "",
       exerciseType: ex.exerciseType,
       referenceVideoUrl: ex.referenceVideoUrl ?? "",
+      isActive: ex.isActive,
     });
+    setError(null);
     setOpen(true);
   }
 
-  function save() {
+  async function save() {
     if (!draft.nameKo.trim()) return;
-    if (editId == null) {
-      const nextId = Math.max(0, ...items.map((i) => i.id)) + 1;
-      setItems([
-        ...items,
-        {
-          id: nextId,
-          nameKo: draft.nameKo,
-          nameEn: draft.nameEn || null,
-          description: null,
-          referenceVideoUrl: draft.referenceVideoUrl || null,
-          exerciseType: draft.exerciseType,
-          isActive: true,
-        },
-      ]);
-    } else {
-      setItems(
-        items.map((i) =>
-          i.id === editId
-            ? {
-                ...i,
-                nameKo: draft.nameKo,
-                nameEn: draft.nameEn || null,
-                exerciseType: draft.exerciseType,
-                referenceVideoUrl: draft.referenceVideoUrl || null,
-              }
-            : i,
-        ),
-      );
-    }
-    setOpen(false);
-  }
+    setSaving(true);
+    setError(null);
 
-  function toggleActive(id: number) {
-    setItems(items.map((i) => (i.id === id ? { ...i, isActive: !i.isActive } : i)));
+    try {
+      if (editId == null) {
+        const res = await fetch("/api/admin/exercises", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nameKo: draft.nameKo,
+            nameEn: draft.nameEn || null,
+            exerciseType: draft.exerciseType,
+            referenceVideoUrl: draft.referenceVideoUrl || null,
+          }),
+        });
+        if (!res.ok) throw new Error(`${res.status}`);
+        const created: AdminExercise = await res.json();
+        setItems((prev) => [...prev, created]);
+      } else {
+        const res = await fetch(`/api/admin/exercises/${editId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nameKo: draft.nameKo,
+            nameEn: draft.nameEn || null,
+            exerciseType: draft.exerciseType,
+            referenceVideoUrl: draft.referenceVideoUrl || null,
+            isActive: draft.isActive,
+          }),
+        });
+        if (!res.ok) throw new Error(`${res.status}`);
+        const updated: AdminExercise = await res.json();
+        setItems((prev) => prev.map((i) => (i.id === editId ? updated : i)));
+      }
+      setOpen(false);
+      router.refresh();
+    } catch {
+      setError(
+        editId == null
+          ? "종목 등록에 실패했습니다. 다시 시도해주세요."
+          : "종목 수정에 실패했습니다. 다시 시도해주세요.",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -141,22 +158,15 @@ export function ExercisesManager({ initial }: { initial: AdminExercise[] }) {
                 )}
               </TD>
               <TD>
-                <button
-                  type="button"
-                  onClick={() => toggleActive(ex.id)}
-                  className="cursor-pointer"
-                  aria-label="노출 토글"
-                >
-                  <Badge tone={ex.isActive ? "success" : "neutral"}>
-                    {ex.isActive ? "노출" : "숨김"}
-                  </Badge>
-                </button>
+                <Badge tone={ex.isActive ? "success" : "neutral"}>
+                  {ex.isActive ? "노출" : "숨김"}
+                </Badge>
               </TD>
               <TD className="text-right">
                 <button
                   type="button"
                   onClick={() => openEdit(ex)}
-                  className="text-sm text-accent hover:text-accent-active"
+                  className={buttonClasses("ghost", "sm")}
                 >
                   수정
                 </button>
@@ -172,10 +182,12 @@ export function ExercisesManager({ initial }: { initial: AdminExercise[] }) {
         title={editId == null ? "운동 종목 등록" : "운동 종목 수정"}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setOpen(false)}>
+            <Button variant="secondary" onClick={() => setOpen(false)} disabled={saving}>
               취소
             </Button>
-            <Button onClick={save}>저장</Button>
+            <Button onClick={save} loading={saving}>
+              저장
+            </Button>
           </>
         }
       >
@@ -213,6 +225,34 @@ export function ExercisesManager({ initial }: { initial: AdminExercise[] }) {
             }
             placeholder="https://storage.posefit.dev/ref/..."
           />
+          {editId != null && (
+            <label className="flex cursor-pointer items-center gap-3">
+              <span className="text-sm font-medium text-text">노출 여부</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={draft.isActive}
+                onClick={() => setDraft({ ...draft, isActive: !draft.isActive })}
+                className={[
+                  "relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent",
+                  "transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                  draft.isActive ? "bg-accent" : "bg-border",
+                ].join(" ")}
+              >
+                <span
+                  className={[
+                    "pointer-events-none inline-block size-5 rounded-full bg-white shadow-sm",
+                    "transition-transform duration-200",
+                    draft.isActive ? "translate-x-5" : "translate-x-0",
+                  ].join(" ")}
+                />
+              </button>
+              <span className="text-sm text-text-muted">
+                {draft.isActive ? "노출" : "숨김"}
+              </span>
+            </label>
+          )}
+          {error && <p className="text-xs text-red-500">{error}</p>}
         </div>
       </Dialog>
     </div>

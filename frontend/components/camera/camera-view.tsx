@@ -20,6 +20,10 @@ export type CameraPermission =
 export interface CameraViewHandle {
   /** 현재 프레임을 jpeg Blob으로 캡처. 스트림이 없으면 null */
   capture: () => Promise<Blob | null>;
+  /** MediaRecorder 녹화 시작 */
+  startRecording: () => void;
+  /** 녹화 종료 후 Blob·파일명 반환. 녹화 중이 아니면 null */
+  stopRecording: () => Promise<{ blob: Blob; filename: string } | null>;
 }
 
 export interface CameraViewProps {
@@ -36,10 +40,12 @@ export interface CameraViewProps {
 export const CameraView = forwardRef<CameraViewHandle, CameraViewProps>(
   function CameraView({ overlay, className, onPermissionChange }, ref) {
     const videoRef = useRef<HTMLVideoElement>(null);
+    const streamRef = useRef<MediaStream | null>(null);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const chunksRef = useRef<Blob[]>([]);
     const [permission, setPermission] = useState<CameraPermission>("prompt");
 
     useEffect(() => {
-      let stream: MediaStream | null = null;
       let cancelled = false;
 
       async function start() {
@@ -49,7 +55,7 @@ export const CameraView = forwardRef<CameraViewHandle, CameraViewProps>(
           return;
         }
         try {
-          stream = await navigator.mediaDevices.getUserMedia({
+          const stream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: "user" },
             audio: false,
           });
@@ -57,6 +63,7 @@ export const CameraView = forwardRef<CameraViewHandle, CameraViewProps>(
             stream.getTracks().forEach((t) => t.stop());
             return;
           }
+          streamRef.current = stream;
           if (videoRef.current) videoRef.current.srcObject = stream;
           setPermission("granted");
           onPermissionChange?.("granted");
@@ -69,7 +76,8 @@ export const CameraView = forwardRef<CameraViewHandle, CameraViewProps>(
       start();
       return () => {
         cancelled = true;
-        stream?.getTracks().forEach((t) => t.stop());
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
       };
     }, [onPermissionChange]);
 
@@ -88,6 +96,37 @@ export const CameraView = forwardRef<CameraViewHandle, CameraViewProps>(
           return new Promise<Blob | null>((resolve) =>
             canvas.toBlob((b) => resolve(b), "image/jpeg", 0.9),
           );
+        },
+        startRecording() {
+          const stream = streamRef.current;
+          if (!stream) return;
+          const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+            ? "video/webm;codecs=vp9"
+            : "video/webm";
+          const recorder = new MediaRecorder(stream, { mimeType });
+          chunksRef.current = [];
+          recorder.ondataavailable = (e) => {
+            if (e.data.size > 0) chunksRef.current.push(e.data);
+          };
+          recorder.start(100);
+          mediaRecorderRef.current = recorder;
+        },
+        stopRecording() {
+          return new Promise((resolve) => {
+            const recorder = mediaRecorderRef.current;
+            if (!recorder || recorder.state === "inactive") {
+              resolve(null);
+              return;
+            }
+            recorder.onstop = () => {
+              const blob = new Blob(chunksRef.current, { type: "video/webm" });
+              const filename = `workout_${Date.now()}.webm`;
+              chunksRef.current = [];
+              resolve({ blob, filename });
+            };
+            recorder.stop();
+            mediaRecorderRef.current = null;
+          });
         },
       }),
       [],

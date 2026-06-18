@@ -22,7 +22,7 @@ class Exercise(Base):
         comment="정적운동 static | 동적운동 dynamic",
     )
     is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("1"), comment="운동 종목 노출 여부"
+        Boolean, nullable=False, server_default=text("0"), comment="운동 종목 노출 여부"
     )
 
     sessions: Mapped[list["WorkoutSession"]] = relationship(back_populates="exercise")
