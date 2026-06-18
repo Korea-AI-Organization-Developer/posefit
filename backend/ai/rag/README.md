@@ -44,9 +44,11 @@ GEMINI_MODEL=gemini-2.5-flash
 기대 출력:
 ```
 코칭 문서 인덱싱 시작 — 임베딩 모델: BAAI/bge-m3
-완료: 70개 청크를 'posefit_coaching' 컬렉션에 저장
-저장 위치: C:\project\posefit\backend\ai\rag\.chroma
+완료: 168개 청크를 'posefit_coaching' 컬렉션에 저장
+저장 위치: C:\project\posefit_RAG_plank\backend\ai\rag\.chroma
 ```
+> 코퍼스 = 기존 JSON 70청크 + **v3 확장 JSONL 98문서 = 168**. v3 추가 내역은
+> 아래 [6. 작업 컨텍스트](#6-작업-컨텍스트--코퍼스-확장-이력)를 참고한다.
 
 ### 단계 ② 검색만 테스트 (무비용, Gemini 미사용)
 벡터 검색이 잘 되는지부터 확인한다. API 키가 없어도 동작한다.
@@ -149,7 +151,38 @@ for r in coach("../rag_docs/group.json.txt"):  # 단계 ③ (--no-llm은 synthes
  "coaching": "둔근을 꽉 쥐어짜듯 ... || 배를 안으로 당기지 말고 ..."}
 ```
 긴 본문은 `RecursiveCharacterTextSplitter`로 800자 단위 청크 분할되고,
-각 청크가 BGE-m3로 임베딩되어 `.chroma/`에 저장된다. (현재 코퍼스 = 70개 청크)
+각 청크가 BGE-m3로 임베딩되어 `.chroma/`에 저장된다. (기존 JSON 코퍼스 = 70개 청크)
+
+#### (A-2) 확장 코퍼스: v3 JSONL (`documents.load_jsonl_docs`)
+
+`rag_docs/plank/v3/*.jsonl`은 위 JSON과 **스키마가 다르다**. 한 줄(line)이 한 문서이며,
+이미 임베딩 친화적으로 직렬화된 `document` 본문을 그대로 갖고 있다:
+```json
+{
+  "id": "plank_hip_sag_side_v1__01_core_alignment_ko",
+  "document": "운동: 플랭크 / 촬영방향: 측면 / 오류코드: plank_hip_sag_side_v1 ...",
+  "metadata": {"exercise":"plank","camera_view":"side",
+               "error_code":"plank_hip_sag_side_v1","variant":"01_core_alignment", ...},
+  "raw_json": { "...원본 코칭 필드 전체(코칭문구·원인가능성·자가점검 등)..." }
+}
+```
+`load_jsonl_docs()`가 각 줄을 읽어 **기존 인덱스 메타데이터 스키마로 정규화**한다
+(`_jsonl_metadata`). 핵심은 `issue_key`를 조회(query)와 **똑같은 규칙**으로 만드는 것:
+`query.issue_key_from_error_code("plank_hip_sag_side_v1") → "hip_sag"`. 이게 일치해야
+조회 시 `where={"issue_key":"hip_sag"}` 필터가 v3 문서까지 걸린다.
+
+| 인덱스 메타 키 | v3 출처 | 비고 |
+|---|---|---|
+| `doc_id` | `id` | 관점별로 고유 (dedup·리포팅용) |
+| `issue_key` | `error_code`에서 추출 | 조회 필터와 일치시키는 핵심 |
+| `view` | `camera_view`(side→측면) | |
+| `coaching` | `raw_json.코칭문구` (` || ` 결합) | `--no-llm` 출력용 |
+| `label` | 고정 `"오류"` | v3는 오류 코칭 확장 문서 |
+| `error_code`/`variant`/`rag_version` | metadata 원본 | v3 전용 부가 메타 |
+
+v3 문서는 관점(variant) 단위로 이미 의미가 나뉘어 있고 본문이 1200~1600자라
+**재분할하지 않고 한 줄 = 한 Document**로 적재한다 (의도된 의미 단위 보존).
+`load_coaching_docs()`가 마지막에 `load_jsonl_docs()` 결과를 합쳐 같은 컬렉션에 넣는다.
 
 ### (B) 조회: 입력 → 코칭, 한 단계씩
 
@@ -224,10 +257,10 @@ ErrorQuery(
 
 | 파일 | 역할 |
 |------|------|
-| `config.py` | 경로·모델명·검색 파라미터 (env로 덮어쓰기) |
-| `documents.py` | 코칭 JSON(루트/v2/정상기준 스키마) → LangChain `Document` |
+| `config.py` | 경로·모델명·검색 파라미터 (env로 덮어쓰기). `source_globs`(JSON)·`jsonl_globs`(v3) |
+| `documents.py` | 코칭 JSON → `Document`(`load_coaching_docs`) + v3 JSONL → `Document`(`load_jsonl_docs`) |
 | `vectorstore.py` | BGE-m3 임베딩 + Chroma 인덱스 빌드/검색 |
-| `query.py` | `analysis_result.errors` → `ErrorQuery` 파싱 |
+| `query.py` | `analysis_result.errors` → `ErrorQuery` 파싱, `issue_key_from_error_code()` (조회·인덱싱 공용) |
 | `pipeline.py` | 검색 + Gemini 합성 (`coach()`) |
 | `ingest.py` / `cli.py` | 인덱스 빌드 / 코칭 조회 CLI |
 
@@ -236,9 +269,50 @@ ErrorQuery(
 - `GEMINI_MODEL` — 생성 모델 (기본 `gemini-2.5-flash`)
 - `BGE_MODEL` — 임베딩 모델 (기본 `BAAI/bge-m3`)
 - `TOP_K` — 오류당 검색 문서 수 (기본 4)
-- `source_globs` — 지식 베이스 범위. 기본은 `plank/*.json`(오류별 사례),
+- `source_globs` — JSON 지식 베이스 범위. 기본은 `plank/*.json`(오류별 사례),
   `plank/v2/*.json`(window별 사례), `plank/v2/correct/*.json`·`exam.json`(정상 기준).
   원천 feature(`windows/`)와 중복본(`v2 copy/`)은 제외.
+- `jsonl_globs` — 확장 RAG 코퍼스(JSONL) 범위. 기본 `plank/v3/*.jsonl`.
 
 ### LLM 교체
 Gemini → Claude 등은 `pipeline.py`의 `_get_llm()` 한 곳만 바꾸면 된다.
+
+---
+
+## 6. 작업 컨텍스트 — 코퍼스 확장 이력
+
+> 이 절은 **다음 작업자(사람/AI)가 이어서 작업할 수 있도록** 무엇을·왜·어떻게 바꿨는지
+> 기록한다. 새 코퍼스를 추가할 때 이 패턴을 그대로 따르면 된다.
+
+### 2026-06-18 — v3 확장 코퍼스 추가 (70 → 168 문서)
+
+**무엇을** — `rag_docs/plank/v3/plank_rag_chroma_documents.jsonl`(오류코드 7종 ×
+관점 14종 = 98문서)을 기존 Chroma 컬렉션(`posefit_coaching`)에 합쳤다. 각 오류에 대해
+핵심정렬·즉시큐·원인근육·위험경고·강도별(low/medium/high)·보강드릴·자가점검·동반오류·
+지표해석 등 14개 관점 문서가 생겨, 같은 `issue_key`에 대한 검색 다양성이 크게 늘었다.
+
+**왜** — 기존 코퍼스는 오류당 문서가 적어 검색 컨텍스트가 빈약했다. v3는 관점별로
+세분화된 코칭 지식을 제공해 Gemini 합성 품질(구체적 큐·주의사항)을 끌어올린다.
+
+**어떻게 (변경 파일)**
+- `config.py` — `jsonl_globs = ("plank/v3/*.jsonl",)` 추가.
+- `query.py` — `issue_key_from_error_code()`를 모듈 함수로 분리(기존 `ErrorQuery.issue_key`
+  프로퍼티가 이를 호출). 조회·인덱싱이 **동일한 issue_key**를 만들게 하기 위함.
+- `documents.py` — `load_jsonl_docs()` + `_jsonl_metadata()` 추가. v3의 `id/document/
+  metadata/raw_json` 스키마를 기존 인덱스 메타(`doc_id/issue_key/label/view/source/
+  coaching`)로 정규화. `load_coaching_docs()`가 마지막에 이를 합친다. v3 본문은
+  관점 단위로 이미 완결돼 **재분할하지 않는다**.
+- 동작 변경 없음: `build_index()`는 그대로 컬렉션을 재생성하므로 `ingest`만 다시 돌리면 된다.
+
+**검증 결과** — `cli ../rag_docs/group.json`(골반 처짐) 실행 시 상위 4개 중 3개가
+v3 문서(`plank_hip_sag_side_v1__{14_metric_interpretation,01_core_alignment,07_self_check}_ko`)로
+검색돼, `where={"issue_key":"hip_sag"}` 필터가 v3까지 정상 적용됨을 확인했다.
+
+### 새 JSONL 코퍼스를 더 추가하려면 (다음 작업자 가이드)
+1. JSONL 파일을 `rag_docs/plank/vN/`에 둔다. 각 줄은 최소 `document`(임베딩 본문)와
+   `metadata.error_code`(issue_key 추출용)를 가져야 한다. `raw_json.코칭문구`가 있으면
+   `--no-llm` 출력에 쓰인다.
+2. `config.jsonl_globs`에 glob 패턴을 추가한다 (예: `"plank/v4/*.jsonl"`).
+3. 메타 키 매핑이 다르면 `documents._jsonl_metadata()`를 조정한다. **반드시 `issue_key`가
+   `query.issue_key_from_error_code()` 결과와 일치**해야 필터 검색이 된다.
+4. `ingest`를 다시 실행해 인덱스를 재빌드하고, 단계 ②(`--no-llm`)로 검색을 검증한다.

@@ -43,6 +43,11 @@ class RagSettings(BaseSettings):
         "exam.json",
     )
 
+    # 확장 RAG 코퍼스(JSONL). v3는 오류코드 7종 × 관점 14종 = 98개의 사전 직렬화
+    # 코칭 문서로, 한 줄(line) = 한 문서다. 각 줄은 임베딩용 본문(document)·메타데이터·
+    # 원본(raw_json)을 담는다. 이미 관점별로 의미 단위가 나뉘어 있어 재분할하지 않는다.
+    jsonl_globs: tuple[str, ...] = ("plank/v3/*.jsonl",)
+
     # --- 모델 ---
     bge_model: str = Field(default="BAAI/bge-m3", alias="BGE_MODEL")
     gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")

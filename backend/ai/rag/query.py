@@ -17,6 +17,19 @@ from pathlib import Path
 from typing import Any
 
 
+def issue_key_from_error_code(error_code: str) -> str:
+    """error_code(plank_hip_sag_side_v1)에서 issue_key(hip_sag) 추출.
+
+    조회(query)와 인덱싱(documents) 양쪽이 같은 issue_key를 만들어야
+    `where={"issue_key": ...}` 메타데이터 필터가 일치한다. 그래서 한 곳에 둔다.
+    """
+    m = re.match(r"^plank_(.+?)_(?:side|front)_v\d+$", error_code)
+    if m:
+        return m.group(1)
+    # fallback: 접두/접미 제거 시도
+    return error_code.replace("plank_", "").replace("_side_v1", "")
+
+
 @dataclass
 class ErrorQuery:
     error_code: str
@@ -28,11 +41,7 @@ class ErrorQuery:
     @property
     def issue_key(self) -> str:
         """error_code(plank_hip_sag_side_v1)에서 issue_key(hip_sag) 추출."""
-        m = re.match(r"^plank_(.+?)_(?:side|front)_v\d+$", self.error_code)
-        if m:
-            return m.group(1)
-        # fallback: 접두/접미 제거 시도
-        return self.error_code.replace("plank_", "").replace("_side_v1", "")
+        return issue_key_from_error_code(self.error_code)
 
     def to_text(self) -> str:
         """임베딩 검색용 자연어 쿼리 문자열."""

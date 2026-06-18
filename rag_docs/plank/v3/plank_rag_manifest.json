@@ -1,0 +1,49 @@
+{
+  "corpus_name": "plank_side_error_rag_korean_corpus",
+  "created_date": "2026-06-18",
+  "language": "ko",
+  "exercise": "plank",
+  "camera_view": "side",
+  "total_documents": 98,
+  "documents_per_error": {
+    "plank_ankle_misalignment_side_v1": 14,
+    "plank_elbow_deviation_side_v1": 14,
+    "plank_head_drop_side_v1": 14,
+    "plank_head_rise_side_v1": 14,
+    "plank_hip_pike_side_v1": 14,
+    "plank_hip_sag_side_v1": 14,
+    "plank_shoulder_collapse_side_v1": 14
+  },
+  "error_codes": [
+    "plank_ankle_misalignment_side_v1",
+    "plank_elbow_deviation_side_v1",
+    "plank_head_drop_side_v1",
+    "plank_head_rise_side_v1",
+    "plank_hip_pike_side_v1",
+    "plank_hip_sag_side_v1",
+    "plank_shoulder_collapse_side_v1"
+  ],
+  "recommended_embedding_field": "document field in plank_rag_chroma_documents.jsonl, or 임베딩본문 + LLM코멘트예시 + 검색키워드 from each JSON",
+  "individual_json_directory": "plank_rag_korean_corpus/",
+  "files": {
+    "individual_json_zip": "plank_rag_korean_json_files.zip",
+    "combined_array": "plank_rag_korean_corpus_array.json",
+    "chroma_jsonl": "plank_rag_chroma_documents.jsonl",
+    "readme": "README_plank_rag_korean.md"
+  },
+  "source_base_docs": [
+    "plank_ankle_misalignment_side_v1",
+    "plank_elbow_deviation_side_v1",
+    "plank_head_drop_side_v1",
+    "plank_head_rise_side_v1",
+    "plank_hip_pike_side_v1",
+    "plank_hip_sag_side_v1",
+    "plank_shoulder_collapse_side_v1"
+  ],
+  "design_notes": [
+    "각 오류별로 핵심 정렬, 즉시 큐, 원인, 위험, 회귀, 브레이싱, 자가점검, 동반 오류, severity별 코멘트, 보강운동, LLM 응답 가이드, 측정값 해석 문서를 분리했습니다.",
+    "ChromaDB에는 JSON 전체보다 JSONL의 document 필드를 임베딩하는 방식을 권장합니다.",
+    "metadata.error_code로 필터링하거나 exercise/camera_view 필터를 함께 사용하면 검색 정확도가 올라갑니다.",
+    "의학적 진단 표현은 피하고 통증 시 중단 문구를 포함했습니다."
+  ]
+}
