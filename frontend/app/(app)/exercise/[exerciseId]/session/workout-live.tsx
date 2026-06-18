@@ -3,11 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { ArrowLeft, Loader2, Play, Square } from "lucide-react";
+import { ArrowLeft, Loader2, Pause, Play, Square } from "lucide-react";
 
 import {
   Button,
-  buttonClasses,
   Card,
   CardBody,
   CardHeader,
@@ -84,13 +83,17 @@ export function WorkoutLive({
 
   const [countdown, setCountdown] = useState(0);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [videoFilename, setVideoFilename] = useState<string | null>(null);
 
   // 추적 시작 시각 — STOP 시 startAt 파라미터로 사용
   const startedAtRef = useRef<Date | null>(null);
 
   const [stopResult, setStopResult] = useState<StopSessionApiResult | null>(null);
   const [stopError, setStopError] = useState<string | null>(null);
+  const resultVideoRef = useRef<HTMLVideoElement>(null);
+  const [resultPlaying, setResultPlaying] = useState(false);
+  const [resultCurrentTime, setResultCurrentTime] = useState(0);
+  const [resultDuration, setResultDuration] = useState(0);
+
   const [saved, setSaved] = useState(false);
   const [stopping, startStop] = useTransition();
   const [savingPending, startSave] = useTransition();
@@ -172,7 +175,6 @@ export function WorkoutLive({
         return;
       }
 
-      setVideoFilename(recorded.filename);
       const url = URL.createObjectURL(recorded.blob);
       setVideoUrl(url);
       await logVideoFile(recorded.filename, recorded.blob.size);
@@ -213,6 +215,13 @@ export function WorkoutLive({
     });
   }
 
+  function toggleResultPlay() {
+    const v = resultVideoRef.current;
+    if (!v) return;
+    if (v.paused) { v.play(); setResultPlaying(true); }
+    else { v.pause(); setResultPlaying(false); }
+  }
+
   function handleDiscard() {
     startStop(async () => {
       await callDiscardSession(session.id).catch(() => null);
@@ -242,7 +251,6 @@ export function WorkoutLive({
       setLiveScore(null);
       if (videoUrl) URL.revokeObjectURL(videoUrl);
       setVideoUrl(null);
-      setVideoFilename(null);
       setStopResult(null);
       setStopError(null);
       setSaved(false);
@@ -266,11 +274,41 @@ export function WorkoutLive({
           <div className="flex flex-col gap-4">
             <div className="overflow-hidden rounded-md border border-border">
               {videoUrl ?? stopResult?.videoUrl ? (
-                <video
-                  src={videoUrl ?? stopResult?.videoUrl ?? undefined}
-                  controls
-                  className="aspect-video w-full object-cover"
-                />
+                <>
+                  <video
+                    ref={resultVideoRef}
+                    src={videoUrl ?? stopResult?.videoUrl ?? undefined}
+                    className="aspect-video w-full object-cover [transform:scaleX(-1)]"
+                    onTimeUpdate={(e) => setResultCurrentTime(e.currentTarget.currentTime)}
+                    onLoadedMetadata={(e) => setResultDuration(e.currentTarget.duration)}
+                    onEnded={() => setResultPlaying(false)}
+                  />
+                  <div className="flex items-center gap-2 border-t border-border px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={toggleResultPlay}
+                      className="flex size-7 items-center justify-center rounded text-text-muted hover:text-text [&_svg]:size-4"
+                    >
+                      {resultPlaying ? <Pause aria-hidden /> : <Play aria-hidden />}
+                    </button>
+                    <input
+                      type="range"
+                      min={0}
+                      max={resultDuration || 0}
+                      step={0.1}
+                      value={resultCurrentTime}
+                      onChange={(e) => {
+                        const t = Number(e.target.value);
+                        if (resultVideoRef.current) resultVideoRef.current.currentTime = t;
+                        setResultCurrentTime(t);
+                      }}
+                      className="flex-1 accent-accent"
+                    />
+                    <span className="font-mono text-xs tabular-nums text-text-subtle">
+                      {clock(Math.floor(resultCurrentTime))} / {clock(Math.floor(resultDuration))}
+                    </span>
+                  </div>
+                </>
               ) : (
                 <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 bg-surface-muted">
                   <Play className="size-8 text-text-subtle" aria-hidden />
