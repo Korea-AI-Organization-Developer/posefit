@@ -13,13 +13,22 @@ from ai.rag.query import ErrorQuery, parse_analysis_result
 from ai.rag.vectorstore import search
 
 _SYSTEM_PROMPT = (
-    "당신은 플랭크 운동 자세를 교정해 주는 전문 코치입니다. "
-    "사용자에게 감지된 자세 오류와 그 관측값, 그리고 참고용 코칭 지식이 주어집니다. "
-    "참고 지식에 근거해 사용자의 관측값을 반영한 코칭을 작성하세요.\n"
-    "규칙:\n"
-    "- 참고 지식에 없는 사실이나 수치를 지어내지 마세요.\n"
-    "- 한국어로, 2~3문장의 실천 가능한 코칭 + 필요한 경우 한 줄 주의사항으로 끝내세요.\n"
-    "- 전문 용어보다 사용자가 바로 따라 할 수 있는 큐(cue) 중심으로 설명하세요."
+    "당신은 플랭크 자세를 교정해 주는 따뜻하고 전문적인 퍼스널 트레이너입니다.\n"
+    "입력으로 (1) 감지된 자세 오류와 심각도, (2) 측정 관측값·기준값, "
+    "(3) 여러 관점에서 검색된 코칭 지식 문서가 주어집니다. "
+    "이 참고 지식에만 근거해 사용자가 바로 따라 할 수 있는 코칭을 한국어 존댓말로 작성하세요.\n"
+    "\n"
+    "작성 규칙:\n"
+    "- 근거: 참고 지식에 있는 내용만 사용하고, 없는 사실·수치·해부학 용어를 지어내지 마세요. "
+    "지식이 부족하면 일반적이고 안전한 큐만 제시하세요.\n"
+    "- 구조: ① 지금 무엇이 무너지고 있는지 한 문장으로 짚고 → ② 즉시 실행 가능한 교정 큐 "
+    "1~2개를 구체적 신체 감각(예: '발뒤꿈치로 뒤쪽 벽을 민다')으로 제시하세요.\n"
+    "- 심각도 반영: severity가 high면 더 단호하게(필요하면 자세를 풀고 다시 잡도록 안내), "
+    "medium이면 또렷하게, low면 가볍게 다듬는 톤으로 조절하세요.\n"
+    "- 수치를 그대로 나열하지 말고 '기준보다 골반이 처졌다'처럼 사용자가 이해할 표현으로 바꾸세요.\n"
+    "- 여러 참고 문서가 서로 다른 관점(즉시 큐·원인·위험 등)을 담고 있으면 핵심만 골라 통합하세요.\n"
+    "- 분량: 2~3문장. 부상 위험이 있을 때만 마지막에 '주의: ~' 한 줄을 덧붙이세요.\n"
+    "- 마크다운 제목(##)이나 목록 기호 없이, 사람에게 말하듯 자연스러운 문장으로만 출력하세요."
 )
 
 
@@ -33,12 +42,20 @@ class Coaching:
 
 
 def _format_context(docs: list[Document]) -> str:
+    """검색된 문서를 번호·관점(variant)과 함께 블록으로 직렬화.
+
+    v3 문서는 issue별로 즉시큐/원인/위험/심각도 등 관점이 나뉘어 있으므로,
+    관점을 헤더에 노출해 LLM이 어떤 성격의 지식인지 알고 통합하도록 돕는다.
+    """
     blocks = []
-    for d in docs:
-        blocks.append(
-            f"[문서 {d.metadata.get('doc_id')} | issue={d.metadata.get('issue_key')} "
-            f"| label={d.metadata.get('label')}]\n{d.page_content}"
-        )
+    for i, d in enumerate(docs, 1):
+        m = d.metadata
+        parts = [f"문서{i}", f"issue={m.get('issue_key')}"]
+        if m.get("variant"):
+            parts.append(f"관점={m.get('variant')}")
+        if m.get("label"):
+            parts.append(f"label={m.get('label')}")
+        blocks.append(f"[{' | '.join(parts)}]\n{d.page_content}")
     return "\n\n".join(blocks)
 
 
@@ -49,9 +66,9 @@ def _build_prompt(eq: ErrorQuery, docs: list[Document]) -> str:
     )
     return (
         f"## 감지된 오류\n{eq.error_name} ({eq.issue_key}), 심각도: {eq.severity}\n\n"
-        f"## 관측값\n{observed or '(제공된 수치 없음)'}\n\n"
-        f"## 참고 코칭 지식\n{_format_context(docs)}\n\n"
-        "위 오류에 대한 코칭 코멘트를 작성하세요."
+        f"## 관측값 (관측이 기준에서 벗어날수록 오류가 큼)\n{observed or '(제공된 수치 없음)'}\n\n"
+        f"## 참고 코칭 지식 (아래 내용에만 근거하세요)\n{_format_context(docs)}\n\n"
+        "위 오류에 대해, 시스템 규칙에 맞춰 사용자에게 전할 코칭 코멘트를 작성하세요."
     )
 
 
