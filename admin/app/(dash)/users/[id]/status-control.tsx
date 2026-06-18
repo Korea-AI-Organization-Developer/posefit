@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { Badge, Button } from "@/components/ui";
 import { USER_STATUS_LABEL, USER_STATUS_TONE } from "@/lib/labels";
@@ -12,10 +13,6 @@ const ACTIONS: Array<{ to: UserStatus; label: string; variant: "secondary" | "da
   { to: "withdrawn", label: "탈퇴 처리", variant: "danger" },
 ];
 
-/*
- * 회원 상태 변경 — mock 단계라 로컬 상태만 갱신한다.
- * 백엔드 연동 시: PATCH /admin/users/{id} { status } 호출 후 router.refresh().
- */
 export function StatusControl({
   userId,
   initial,
@@ -23,16 +20,29 @@ export function StatusControl({
   userId: number;
   initial: UserStatus;
 }) {
+  const router = useRouter();
   const [status, setStatus] = useState<UserStatus>(initial);
   const [pending, setPending] = useState<UserStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function change(to: UserStatus) {
     if (to === status) return;
     setPending(to);
-    // mock: 네트워크 지연 흉내
-    await new Promise((r) => setTimeout(r, 350));
-    setStatus(to);
-    setPending(null);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: to }),
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      setStatus(to);
+      router.refresh();
+    } catch {
+      setError("상태 변경에 실패했습니다. 다시 시도해주세요.");
+    } finally {
+      setPending(null);
+    }
   }
 
   return (
@@ -47,7 +57,7 @@ export function StatusControl({
             key={a.to}
             size="sm"
             variant={a.variant}
-            disabled={a.to === status}
+            disabled={a.to === status || pending !== null}
             loading={pending === a.to}
             onClick={() => change(a.to)}
           >
@@ -55,9 +65,7 @@ export function StatusControl({
           </Button>
         ))}
       </div>
-      <p className="text-xs text-text-subtle">
-        ⚠️ mock 동작 — 백엔드 연동 시 변경이 감사 로그에 기록됩니다.
-      </p>
+      {error && <p className="text-xs text-red-500">{error}</p>}
     </div>
   );
 }
