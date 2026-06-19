@@ -1,4 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime
+
+from app.models.mixins import KST
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -78,7 +80,7 @@ class UserService:
         if user is None:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
         user.status = UserStatus.withdrawn
-        user.withdrawn_at = datetime.now(timezone.utc)
+        user.withdrawn_at = datetime.now(KST)
         await self.db.commit()
 
     async def submit_agreements(

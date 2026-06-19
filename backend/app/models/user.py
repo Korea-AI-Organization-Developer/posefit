@@ -13,12 +13,12 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.mysql import DATETIME, VARBINARY
+from sqlalchemy.dialects.mysql import VARBINARY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.enums import Gender, UserRole, UserStatus
-from app.models.mixins import TimestampMixin
+from app.models.mixins import TimestampMixin, _UTCDateTime
 
 
 class User(Base, TimestampMixin):
@@ -32,7 +32,7 @@ class User(Base, TimestampMixin):
     status: Mapped[UserStatus] = mapped_column(
         Enum(UserStatus), nullable=False, server_default=text("'active'"), comment="활성 | 탈퇴"
     )
-    withdrawn_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6), nullable=True)
+    withdrawn_at: Mapped[datetime | None] = mapped_column(_UTCDateTime(fsp=6), nullable=True)
     token_version: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -107,7 +107,7 @@ class Agreement(Base):
         Boolean, nullable=False, server_default=text("0"), comment="마케팅 수신(선택)"
     )
     agreed_at: Mapped[datetime] = mapped_column(
-        DATETIME(fsp=6), nullable=False, server_default=text("CURRENT_TIMESTAMP(6)")
+        _UTCDateTime(fsp=6), nullable=False, server_default=text("CURRENT_TIMESTAMP(6)")
     )
 
     user: Mapped["User"] = relationship(back_populates="agreement")
@@ -126,7 +126,7 @@ class FaceEmbedding(Base):
         String(50), nullable=False, comment="임베딩 모델 버전. 동일 버전끼리만 비교 유효."
     )
     registered_at: Mapped[datetime] = mapped_column(
-        DATETIME(fsp=6), nullable=False, server_default=text("CURRENT_TIMESTAMP(6)"), comment="등록날짜"
+        _UTCDateTime(fsp=6), nullable=False, server_default=text("CURRENT_TIMESTAMP(6)"), comment="등록날짜"
     )
 
     user: Mapped["User"] = relationship(back_populates="face_embedding")
