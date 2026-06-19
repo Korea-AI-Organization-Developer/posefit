@@ -14,6 +14,21 @@ export function formatSessionTime(iso: string): string {
   return sessionTimeFormatter.format(new Date(iso));
 }
 
+/*
+ * 백엔드가 타임존 표기 없이 보내는 datetime("2026-06-09T09:30:00")은 UTC(naive)다.
+ * JS `new Date()`는 표기가 없으면 "로컬 시간"으로 해석하므로, 표기가 없을 때만 'Z'를
+ * 붙여 UTC로 확정한 뒤 KST로 포맷한다. (이미 offset/Z가 있으면 그대로 둔다.)
+ */
+function asUtcDate(iso: string): Date {
+  const hasZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(iso);
+  return new Date(hasZone ? iso : `${iso}Z`);
+}
+
+/** 백엔드 datetime(UTC, 표기 없음 가능) → "6월 9일 18:30" (KST) */
+export function formatFeedbackTime(iso: string): string {
+  return sessionTimeFormatter.format(asUtcDate(iso));
+}
+
 const dayFormatter = new Intl.DateTimeFormat("ko-KR", {
   timeZone: "Asia/Seoul",
   month: "long",
