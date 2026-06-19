@@ -1,4 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime
+
+from app.models.mixins import KST
 
 import bcrypt
 from fastapi import HTTPException
@@ -39,7 +41,7 @@ class AdminAuthService:
         if admin.status != AdminStatus.active:
             raise HTTPException(status_code=401, detail="비활성화된 관리자 계정입니다")
 
-        admin.last_login_at = datetime.now(timezone.utc)
+        admin.last_login_at = datetime.now(KST)
         await self.db.commit()
         await self.db.refresh(admin)
 

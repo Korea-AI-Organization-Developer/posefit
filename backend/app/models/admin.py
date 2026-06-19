@@ -18,12 +18,11 @@ from sqlalchemy import (
     String,
     text,
 )
-from sqlalchemy.dialects.mysql import DATETIME
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.enums import AdminRole, AdminStatus, LlmProvider
-from app.models.mixins import TimestampMixin
+from app.models.mixins import TimestampMixin, _UTCDateTime
 
 
 class AdminAccount(Base, TimestampMixin):
@@ -52,7 +51,7 @@ class AdminAccount(Base, TimestampMixin):
         server_default=text("0"),
         comment="refresh 토큰 무효화용. 로그아웃 시 +1.",
     )
-    last_login_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6), nullable=True)
+    last_login_at: Mapped[datetime | None] = mapped_column(_UTCDateTime(fsp=6), nullable=True)
 
     audit_logs: Mapped[list["AdminAuditLog"]] = relationship(back_populates="admin")
 
@@ -94,7 +93,7 @@ class AdminAuditLog(Base):
     )
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DATETIME(fsp=6), nullable=False, server_default=text("CURRENT_TIMESTAMP(6)")
+        _UTCDateTime(fsp=6), nullable=False, server_default=text("CURRENT_TIMESTAMP(6)")
     )
 
     admin: Mapped["AdminAccount"] = relationship(back_populates="audit_logs")
