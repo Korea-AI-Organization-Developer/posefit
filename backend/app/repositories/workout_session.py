@@ -1,4 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime
+
+from app.models.mixins import KST
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,7 +41,7 @@ class WorkoutSessionRepository:
             user_id=user_id,
             exercise_id=exercise_id,
             status=SessionStatus.in_progress,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(KST),
         )
         self.db.add(session)
         await self.db.flush()

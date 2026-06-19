@@ -1714,6 +1714,49 @@ paths:
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
 
+  /admin/llm/models/{id}:
+    parameters:
+      - { $ref: '#/components/parameters/LlmModelId' }
+    patch:
+      tags: [Admin LLM]
+      summary: LLM 모델 수정 (부분 갱신)
+      security:
+        - adminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LlmModelUpdateRequest'
+      responses:
+        '200':
+          description: 수정된 모델.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmModel'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      tags: [Admin LLM]
+      summary: LLM 모델 삭제
+      description: 활성 모델은 삭제할 수 없다 (먼저 다른 모델로 교체 후 삭제).
+      security:
+        - adminBearerAuth: []
+      responses:
+        '204':
+          description: 삭제 완료.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /admin/llm/models/{id}:activate:
     parameters:
       - { $ref: '#/components/parameters/LlmModelId' }
@@ -3157,6 +3200,13 @@ components:
       required: [provider, modelName, displayName]
       properties:
         provider: { type: string, enum: [google, openai, anthropic] }
+        modelName: { type: string, maxLength: 100 }
+        displayName: { type: string, maxLength: 100 }
+        params: { type: ["object", "null"], additionalProperties: true }
+
+    LlmModelUpdateRequest:
+      type: object
+      properties:
         modelName: { type: string, maxLength: 100 }
         displayName: { type: string, maxLength: 100 }
         params: { type: ["object", "null"], additionalProperties: true }
