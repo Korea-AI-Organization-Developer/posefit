@@ -1,6 +1,6 @@
 import { Card, CardBody, CardHeader } from "@/components/ui";
 import { formatDay } from "@/lib/format";
-import type { CalendarDay } from "@/lib/mock/dashboard";
+import type { CalendarDay } from "@/lib/api/reports";
 
 const TOTAL_DAYS = 30;
 

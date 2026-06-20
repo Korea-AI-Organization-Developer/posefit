@@ -1,6 +1,10 @@
+import logging
+
 import httpx
 from fastapi import HTTPException
 from jose import JWTError
+
+logger = logging.getLogger(__name__)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -37,6 +41,8 @@ async def exchange_google_code(code: str, redirect_uri: str) -> dict:
                 "grant_type": "authorization_code",
             },
         )
+        if not token_res.is_success:
+            logger.error("Google token exchange 실패 | status=%s body=%s redirect_uri=%s", token_res.status_code, token_res.text, redirect_uri)
         token_res.raise_for_status()
         access_token = token_res.json()["access_token"]
 
@@ -62,6 +68,7 @@ class AuthService:
         try:
             userinfo = await exchange_google_code(code, redirect_uri)
         except (httpx.HTTPError, KeyError) as exc:
+            logger.error("Google OAuth 실패 | provider=%s redirect_uri=%s error=%s", provider, redirect_uri, exc)
             raise HTTPException(
                 status_code=400, detail="구글 OAuth 코드 교환에 실패했습니다"
             ) from exc

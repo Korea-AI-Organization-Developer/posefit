@@ -1,6 +1,6 @@
 import { Card, CardBody } from "@/components/ui";
 import { formatScore } from "@/lib/format";
-import type { DashboardResponse } from "@/lib/mock/dashboard";
+import type { DashboardResponse } from "@/lib/api/dashboard";
 
 interface Kpi {
   label: string;

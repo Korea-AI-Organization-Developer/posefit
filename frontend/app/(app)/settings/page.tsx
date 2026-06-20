@@ -5,7 +5,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui";
 import { ProfileForm } from "@/components/forms/profile-form";
 import { getLatestAgreement } from "@/lib/api/agreements";
 import { getMe } from "@/lib/api/users";
-import { getSocialAccounts } from "@/lib/mock/social-accounts";
+import { getSocialAccounts } from "@/lib/api/social-accounts";
 import { getVideosSummary } from "@/lib/mock/videos";
 import { saveProfileAction } from "./actions";
 import { AccountSection } from "./account-section";
@@ -44,9 +44,17 @@ function Section({
  * SCR-11 설정 (SET-01~08).
  * 인증/유저 도메인은 실제 API(@/lib/api/*, httpOnly 쿠키 BFF):
  *   getMe() · getLatestAgreement() — 프로필·신체정보·마케팅 동의 현재값
- * 소셜 연동·저장 영상은 백엔드 미구현이라 @/lib/mock/* 사용.
+ * 소셜 연동은 실제 API 사용. 저장 영상은 백엔드 미구현이라 @/lib/mock/* 사용.
  */
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const sp = await searchParams;
+  const linked = sp.linked === "1";
+  const linkError = typeof sp.error === "string" ? sp.error : undefined;
+
   const [me, agreement, social, videos] = await Promise.all([
     getMe(),
     getLatestAgreement(),
@@ -103,7 +111,7 @@ export default async function SettingsPage() {
 
         {/* SET-06 — 연결된 소셜 계정 */}
         <Section title="연결된 계정" description="소셜 로그인 계정을 관리해요.">
-          <SocialSection initial={social} />
+          <SocialSection initial={social} linked={linked} linkError={linkError} />
         </Section>
 
         {/* SET-07 — 저장 영상 */}
