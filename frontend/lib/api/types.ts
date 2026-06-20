@@ -112,3 +112,81 @@ export interface ExerciseDetailResponse {
   exerciseType: ExerciseType;
   isActive: boolean;
 }
+
+// ─── 피드백(feedback) 관련 타입 ─────────────────────────────────────────────
+// 백엔드 schemas/feedback.py(FeedbackRead) 와 "같은 모양". openapi.yaml Feedback 스키마 기준.
+
+export type FeedbackSeverity = "info" | "warning" | "critical";
+
+export type FeedbackSource = "rule" | "llm";
+
+export interface Feedback {
+  id: number;
+  severity: FeedbackSeverity;
+  generatedBy: FeedbackSource;
+  content: string;
+  createdAt: string;
+}
+
+// ─── 리포트 ───────────────────────────────────────────────────────────────────
+export type ReportPeriod = "day" | "week" | "month" | "cumulative";
+
+export interface BestExercise {
+  id: number;
+  nameKo: string;
+  bestScore: number;
+}
+
+export interface ReportSummary {
+  period: ReportPeriod;
+  periodStart: string; // date
+  periodEnd: string;   // date
+  sessionsCount: number;
+  totalDurationSec: number;
+  avgScore: number | null;
+  bestExercise: BestExercise | null;
+}
+
+export interface CalendarDay {
+  date: string; // date
+  sessionsCount: number;
+  avgScore: number | null;
+}
+
+export interface CalendarResponse {
+  days: CalendarDay[];
+}
+
+export interface ScoreTrendPoint {
+  date: string; // date
+  avgScore: number;
+}
+
+export interface ScoreTrendSeries {
+  exercise: { id: number; nameKo: string };
+  points: ScoreTrendPoint[];
+}
+
+export interface ScoreTrendResponse {
+  series: ScoreTrendSeries[];
+}
+
+export type EvaluationMessageType = "positive" | "warning" | "tip";
+
+export interface EvaluationMessage {
+  type: EvaluationMessageType;
+  text: string;
+}
+
+export interface EvaluationResponse {
+  period: ReportPeriod;
+  exerciseId: number | null;
+  messages: EvaluationMessage[];
+}
+
+export interface ReportOverview {
+  summary: ReportSummary;
+  calendar: CalendarResponse;
+  scoreTrend: ScoreTrendResponse;
+  evaluation: EvaluationResponse;
+}

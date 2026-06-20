@@ -1,4 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime
+
+from app.models.mixins import KST
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -73,7 +75,7 @@ class AdminUsersService:
         prev_status = user.status
         user.status = body.status
         if body.status == UserStatus.withdrawn:
-            user.withdrawn_at = datetime.now(timezone.utc)
+            user.withdrawn_at = datetime.now(KST)
         elif prev_status == UserStatus.withdrawn:
             user.withdrawn_at = None
 

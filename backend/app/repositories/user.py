@@ -82,6 +82,28 @@ class UserRepository:
         self.db.add(account)
         return account
 
+    async def list_social_accounts(self, user_id: int) -> list[SocialAccount]:
+        result = await self.db.execute(
+            select(SocialAccount)
+            .where(SocialAccount.user_id == user_id)
+            .order_by(SocialAccount.id)
+        )
+        return list(result.scalars().all())
+
+    async def get_social_account_by_provider(
+        self, user_id: int, provider: str
+    ) -> SocialAccount | None:
+        result = await self.db.execute(
+            select(SocialAccount).where(
+                SocialAccount.user_id == user_id,
+                SocialAccount.provider == provider,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def delete_social_account(self, account: SocialAccount) -> None:
+        await self.db.delete(account)
+
     # ─── Agreement (append-only) ───
     async def get_latest_agreement(self, user_id: int) -> Agreement | None:
         result = await self.db.execute(

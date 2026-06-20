@@ -1,4 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime
+
+from app.models.mixins import KST
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +11,9 @@ from app.repositories.user import UserRepository
 from app.schemas.user import (
     AgreementCreateRequest,
     AgreementRead,
+    FaceRegistrationResponse,
     RegistrationStep,
+    SocialAccountRead,
     UserDetailRead,
     UserDetailUpsertRequest,
     UserRead,
@@ -78,7 +82,7 @@ class UserService:
         if user is None:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
         user.status = UserStatus.withdrawn
-        user.withdrawn_at = datetime.now(timezone.utc)
+        user.withdrawn_at = datetime.now(KST)
         await self.db.commit()
 
     async def submit_agreements(
@@ -119,7 +123,7 @@ class UserService:
 
     async def register_face(
         self, user_id: int, image_bytes: bytes, *, replace: bool
-    ) -> "FaceRegistrationResponse":
+    ) -> FaceRegistrationResponse:
         if not image_bytes:
             raise HTTPException(status_code=422, detail="이미지가 비어 있습니다")
 
@@ -151,7 +155,6 @@ class UserService:
         face = await self.repo.create_face(user_id, embedding, MODEL_VERSION)
         await self.db.commit()
         await self.db.refresh(face)
-        from app.schemas.user import FaceRegistrationResponse
         return FaceRegistrationResponse(
             registered_at=face.registered_at, model_version=face.model_version
         )
@@ -161,4 +164,63 @@ class UserService:
         if face is None:
             raise HTTPException(status_code=404, detail="등록된 얼굴이 없습니다")
         await self.repo.delete_face(face)
+        await self.db.commit()
+
+    # ─── 소셜 계정 ───
+    async def list_social_accounts(self, user_id: int) -> list[SocialAccountRead]:
+        accounts = await self.repo.list_social_accounts(user_id)
+        return [
+            SocialAccountRead(
+                provider=a.provider,
+                provider_uid=a.provider_uid,
+                provider_email=a.provider_email,
+                linked_at=a.created_at,
+            )
+            for a in accounts
+        ]
+
+    async def link_social_account(
+        self, user_id: int, provider: str, code: str, redirect_uri: str
+    ) -> SocialAccountRead:
+        from app.services.auth import SUPPORTED_PROVIDERS, exchange_google_code
+
+        if provider not in SUPPORTED_PROVIDERS:
+            raise HTTPException(status_code=400, detail=f"지원하지 않는 provider: {provider}")
+
+        try:
+            userinfo = await exchange_google_code(code, redirect_uri)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="소셜 코드 교환에 실패했습니다") from exc
+
+        uid = userinfo["sub"]
+        email = userinfo.get("email")
+        picture = userinfo.get("picture")
+
+        taken = await self.repo.get_social_account(provider, uid)
+        if taken is not None and taken.user_id != user_id:
+            raise HTTPException(status_code=409, detail="이미 다른 계정에 연결된 소셜 계정입니다")
+        if taken is not None and taken.user_id == user_id:
+            raise HTTPException(status_code=409, detail="이미 연동된 구글 계정입니다")
+
+        account = await self.repo.create_social_account(user_id, provider, uid, email, picture)
+        await self.db.commit()
+        await self.db.refresh(account)
+        return SocialAccountRead(
+            provider=account.provider,
+            provider_uid=account.provider_uid,
+            provider_email=account.provider_email,
+            linked_at=account.created_at,
+        )
+
+    async def unlink_social_account(self, user_id: int, provider: str, provider_uid: str) -> None:
+        accounts = await self.repo.list_social_accounts(user_id)
+        if len(accounts) <= 1:
+            raise HTTPException(
+                status_code=409,
+                detail="마지막 소셜 계정은 해제할 수 없습니다",
+            )
+        account = await self.repo.get_social_account(provider, provider_uid)
+        if account is None or account.user_id != user_id:
+            raise HTTPException(status_code=404, detail="연결된 소셜 계정이 없습니다")
+        await self.repo.delete_social_account(account)
         await self.db.commit()
