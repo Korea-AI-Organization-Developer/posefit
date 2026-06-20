@@ -11,6 +11,7 @@ from app.repositories.user import UserRepository
 from app.schemas.user import (
     AgreementCreateRequest,
     AgreementRead,
+    FaceRegistrationResponse,
     RegistrationStep,
     SocialAccountRead,
     UserDetailRead,
@@ -151,9 +152,7 @@ class UserService:
             raise HTTPException(status_code=422, detail=detail)
 
         embedding = encoding_to_bytes(encoding)
-        face = await self.repo.create_face(
-            user_id, embedding, MODEL_VERSION
-        )
+        face = await self.repo.create_face(user_id, embedding, MODEL_VERSION)
         await self.db.commit()
         await self.db.refresh(face)
         return FaceRegistrationResponse(
