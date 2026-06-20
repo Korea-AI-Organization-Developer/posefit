@@ -79,3 +79,13 @@ class SocialAccountRead(CamelModel):
     linked_at: datetime  # social_accounts.created_at
 
 
+# ─── Face ──────────────────────────────────────────────────────────────────
+class FaceDetectResponse(CamelModel):
+    detected: bool
+
+
+class FaceRegistrationResponse(CamelModel):
+    registered_at: datetime
+    model_version: str
+
+

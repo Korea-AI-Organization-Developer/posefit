@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, File, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.auth import AuthSocialCallbackRequest
+from app.schemas.dashboard import DashboardResponse
 from app.schemas.user import (
     AgreementCreateRequest,
     AgreementRead,
@@ -16,6 +17,7 @@ from app.schemas.user import (
     UserRead,
     UserUpdateRequest,
 )
+from app.services.dashboard import DashboardService
 from app.services.user import UserService
 
 router = APIRouter(prefix="/users/me", tags=["Users"])
@@ -148,3 +150,12 @@ async def unlink_social_account(
     db: AsyncSession = Depends(get_db),
 ):
     await UserService(db).unlink_social_account(user.id, provider, provider_uid)
+
+
+# ─── 대시보드 ───
+@router.get("/dashboard", response_model=DashboardResponse)
+async def get_dashboard(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await DashboardService(db).get_dashboard(user.id)
