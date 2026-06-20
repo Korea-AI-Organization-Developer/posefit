@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { getExercise } from "@/lib/mock/exercises";
+import { getExerciseDetail } from "@/lib/api/exercises";
 import { WorkoutLive } from "./workout-live";
 
 export const metadata: Metadata = { title: "운동 실행" };
@@ -19,7 +19,7 @@ export default async function SessionPage({
 }) {
   const { exerciseId } = await params;
   const { s } = await searchParams;
-  const exercise = await getExercise(Number(exerciseId));
+  const exercise = await getExerciseDetail(Number(exerciseId));
   if (!exercise) notFound();
 
   return (

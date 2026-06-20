@@ -1,22 +1,23 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { ArrowLeft, Play } from "lucide-react";
 
 import { Card, CardBody, CardHeader } from "@/components/ui";
-import { getExercise, type ExerciseType } from "@/lib/mock/exercises";
+import { getExerciseDetail } from "@/lib/api/exercises";
 import { StartButton } from "./start-button";
+import { TodayFeedbacks } from "./today-feedbacks";
 
 export const metadata: Metadata = { title: "정답 영상" };
 
-const TYPE_LABEL: Record<ExerciseType, string> = {
+const TYPE_LABEL: Record<string, string> = {
   dynamic: "동적 · 반복 횟수 측정",
   static: "정적 · 유지 시간 측정",
 };
 
 /*
  * SCR-07 정답(모범) 영상 보기 (EX-02). "운동 시작하기" → createSession 후 실행 화면.
- * getExercise() → GET /api/v1/exercises/{id} (백엔드 준비 후 lib/api 로 교체).
  */
 export default async function ExerciseDetailPage({
   params,
@@ -24,7 +25,7 @@ export default async function ExerciseDetailPage({
   params: Promise<{ exerciseId: string }>;
 }) {
   const { exerciseId } = await params;
-  const exercise = await getExercise(Number(exerciseId));
+  const exercise = await getExerciseDetail(Number(exerciseId));
   if (!exercise) notFound();
 
   return (
@@ -90,6 +91,27 @@ export default async function ExerciseDetailPage({
           </p>
         </div>
       </div>
+
+      {/* 오늘(KST) 이 종목에서 받은 피드백 — GET /exercises/{id}/feedbacks */}
+      <div className="mt-6">
+        <Suspense fallback={<TodayFeedbacksFallback />}>
+          <TodayFeedbacks exerciseId={exercise.id} />
+        </Suspense>
+      </div>
     </div>
+  );
+}
+
+/* 피드백 로딩 중 자리표시 — 카드 골격만 보여준다 */
+function TodayFeedbacksFallback() {
+  return (
+    <Card>
+      <CardHeader>
+        <h2 className="text-sm font-semibold">오늘의 피드백</h2>
+      </CardHeader>
+      <CardBody>
+        <p className="text-sm text-text-subtle">불러오는 중…</p>
+      </CardBody>
+    </Card>
   );
 }

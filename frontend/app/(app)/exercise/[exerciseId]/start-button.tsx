@@ -15,7 +15,7 @@ export function StartButton({ exerciseId }: { exerciseId: number }) {
   function go() {
     startTransition(async () => {
       const session = await createSession(exerciseId);
-      router.push(`/workout/${exerciseId}/session?s=${session.id}`);
+      router.push(`/exercise/${exerciseId}/session?s=${session.id}`);
     });
   }
 

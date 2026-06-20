@@ -33,6 +33,9 @@ desktop.ini
 */data
 /data
 
+# 업로드 파일
+backend/uploads/
+
 # 생성 파일
 *.pt
 *.pth

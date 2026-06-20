@@ -16,12 +16,12 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.mysql import BIGINT, DATETIME, INTEGER
+from sqlalchemy.dialects.mysql import BIGINT, INTEGER
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.enums import FeedbackSeverity, FeedbackSource, SessionStatus
-from app.models.mixins import TimestampMixin
+from app.models.mixins import TimestampMixin, _UTCDateTime
 
 
 class WorkoutSession(Base, TimestampMixin):
@@ -35,10 +35,10 @@ class WorkoutSession(Base, TimestampMixin):
         Enum(SessionStatus), nullable=False, server_default=text("'in_progress'")
     )
     started_at: Mapped[datetime] = mapped_column(
-        DATETIME(fsp=6), nullable=False, comment="세션 시작 시각(UTC)."
+        _UTCDateTime(fsp=6), nullable=False, comment="세션 시작 시각(KST)."
     )
     ended_at: Mapped[datetime | None] = mapped_column(
-        DATETIME(fsp=6), nullable=True, comment="세션 종료 시각(UTC). 진행 중이면 NULL."
+        _UTCDateTime(fsp=6), nullable=True, comment="세션 종료 시각(KST). 진행 중이면 NULL."
     )
     score: Mapped[Decimal | None] = mapped_column(
         Numeric(5, 2), nullable=True, comment="0~100점. 완료 시에만 채워짐."
@@ -95,7 +95,7 @@ class Feedback(Base):
     )
     generated_by: Mapped[FeedbackSource] = mapped_column(Enum(FeedbackSource), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DATETIME(fsp=6), nullable=False, server_default=text("CURRENT_TIMESTAMP(6)")
+        _UTCDateTime(fsp=6), nullable=False, server_default=text("CURRENT_TIMESTAMP(6)")
     )
 
     session: Mapped["WorkoutSession"] = relationship(back_populates="feedbacks")

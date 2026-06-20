@@ -7,11 +7,13 @@ import { cn } from "@/lib/utils";
 interface NavItem {
   label: string;
   href: string;
+  /** active 판정에 쓸 prefix. 없으면 href 그대로 사용. */
+  activePrefix?: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { label: "대시보드", href: "/dashboard" },
-  { label: "운동하기", href: "/workout" },
+  { label: "운동하기", href: "/workout/face-gate", activePrefix: "/workout" },
   { label: "리포트", href: "/reports" },
   { label: "설정", href: "/settings" },
 ];
@@ -21,8 +23,9 @@ export function NavLinks() {
 
   return (
     <nav aria-label="주요 메뉴" className="flex h-full items-center gap-6">
-      {NAV_ITEMS.map(({ label, href }) => {
-        const active = pathname === href || pathname.startsWith(`${href}/`);
+      {NAV_ITEMS.map(({ label, href, activePrefix }) => {
+        const base = activePrefix ?? href;
+        const active = pathname === href || pathname === base || pathname.startsWith(`${base}/`);
         return (
           <Link
             key={href}
