@@ -1,4 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+KST = timezone(timedelta(hours=9))
 
 from sqlalchemy import TypeDecorator, text
 from sqlalchemy.dialects.mysql import DATETIME
@@ -21,7 +23,7 @@ class _UTCDateTime(TypeDecorator):
 
     def process_result_value(self, value, dialect):
         if value is not None and value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
+            return value.replace(tzinfo=timezone(timedelta(hours=9)))
         return value
 
 

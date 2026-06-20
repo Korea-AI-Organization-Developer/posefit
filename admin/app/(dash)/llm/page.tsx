@@ -1,4 +1,4 @@
-import { listLlmModels } from "@/lib/mock/admin-api";
+import { listLlmModels } from "@/lib/api/admin-llm";
 import { LlmManager } from "./llm-manager";
 
 export const metadata = { title: "LLM 모델" };

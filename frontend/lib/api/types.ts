@@ -113,6 +113,21 @@ export interface ExerciseDetailResponse {
   isActive: boolean;
 }
 
+// ─── 피드백(feedback) 관련 타입 ─────────────────────────────────────────────
+// 백엔드 schemas/feedback.py(FeedbackRead) 와 "같은 모양". openapi.yaml Feedback 스키마 기준.
+
+export type FeedbackSeverity = "info" | "warning" | "critical";
+
+export type FeedbackSource = "rule" | "llm";
+
+export interface Feedback {
+  id: number;
+  severity: FeedbackSeverity;
+  generatedBy: FeedbackSource;
+  content: string;
+  createdAt: string;
+}
+
 // ─── 리포트 ───────────────────────────────────────────────────────────────────
 export type ReportPeriod = "day" | "week" | "month" | "cumulative";
 
