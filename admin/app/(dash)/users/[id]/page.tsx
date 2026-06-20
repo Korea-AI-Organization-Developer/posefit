@@ -5,7 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { Badge, Card, CardBody, CardHeader } from "@/components/ui";
 import { GENDER_LABEL, USER_STATUS_LABEL, USER_STATUS_TONE } from "@/lib/labels";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
-import { getUserDetail } from "@/lib/mock/admin-api";
+import { getUserDetail } from "@/lib/api/admin-users";
 import { StatusControl } from "./status-control";
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {

@@ -6,8 +6,9 @@
 export type RegistrationStep =
   | "agreements_required"
   | "detail_required"
-  | "face_required"
   | "complete";
+
+export type FaceGateMode = "registration" | "verification";
 
 export type Gender = "M" | "F" | "U";
 
@@ -79,11 +80,53 @@ export interface AgreementCreateRequest {
   marketingAgreed?: boolean;
 }
 
-export interface FaceDetectResponse {
-  detected: boolean;
+// ─── 이번에 추가한 운동(exercise) 관련 타입들 ───────────────────────────────
+// 백엔드 schemas/exercise.py 와 "같은 모양". 둘 다 openapi.yaml 명세를 보고 만들어 일치한다.
+
+// ExerciseType: 운동 종류. 이 두 글자 외의 값은 타입 에러로 막힌다(static=정적, dynamic=동적).
+export type ExerciseType = "static" | "dynamic";
+
+// ExerciseSummary: 운동 한 개의 요약. 목록 카드 하나에 들어가는 데이터 모양.
+// (interface = "객체가 이런 필드들을 가진다"는 타입 정의. 백엔드가 보내는 JSON과 1:1로 맞춘다.)
+export interface ExerciseSummary {
+  id: number;                       // 운동 고유 번호.
+  nameKo: string;                   // 한글 이름 (예: "런지").
+  nameEn: string | null;            // 영문 이름. 없으면 null (| null = "또는 null").
+  exerciseType: ExerciseType;       // static | dynamic.
+  isActive: boolean;                // 노출 여부.
+  userAvgScore: number | null;      // 이 사용자의 평균 점수. 안 했으면 null → 화면에 "기록 없음".
 }
 
-export interface FaceRegistrationResponse {
-  registeredAt: string; // date-time
-  modelVersion: string;
+// ExerciseListResponse: 목록 API의 전체 응답. items 배열 안에 위 요약들이 들어온다.
+export interface ExerciseListResponse {
+  items: ExerciseSummary[];         // [] = 배열. ExerciseSummary들의 목록.
+}
+
+// ExerciseDetailResponse: 운동 상세화면 데이터 응답.
+export interface ExerciseDetailResponse {
+  id: number;
+  nameKo: string;
+  nameEn: string | null;
+  description: string | null;
+  referenceVideoUrl: string | null;
+  exerciseType: ExerciseType;
+  isActive: boolean;
+}
+
+// ─── 피드백(feedback) 관련 타입 ─────────────────────────────────────────────
+// 백엔드 schemas/feedback.py(FeedbackRead) 와 "같은 모양". openapi.yaml Feedback 스키마 기준.
+
+// FeedbackSeverity: 피드백 심각도. info=정보, warning=주의, critical=위험.
+export type FeedbackSeverity = "info" | "warning" | "critical";
+
+// FeedbackSource: 피드백 생성 주체. rule=규칙 기반, llm=AI 분석.
+export type FeedbackSource = "rule" | "llm";
+
+// Feedback: 피드백 한 개. GET /exercises/{id}/feedbacks 가 이 모양의 배열을 돌려준다.
+export interface Feedback {
+  id: number;                       // 피드백 고유 번호 (정렬 기준, id ASC).
+  severity: FeedbackSeverity;       // info | warning | critical.
+  generatedBy: FeedbackSource;      // rule | llm.
+  content: string;                  // 사용자에게 보여줄 자연어 피드백.
+  createdAt: string;                // 생성 시각 (date-time).
 }

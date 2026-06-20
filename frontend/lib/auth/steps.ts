@@ -4,6 +4,5 @@ import type { RegistrationStep } from "@/lib/api/types";
 export const STEP_DEST: Record<RegistrationStep, string> = {
   agreements_required: "/onboarding/terms",
   detail_required: "/onboarding/profile",
-  face_required: "/onboarding/face",
   complete: "/dashboard",
 };

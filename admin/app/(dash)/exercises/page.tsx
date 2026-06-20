@@ -1,4 +1,4 @@
-import { listExercises } from "@/lib/mock/admin-api";
+import { listExercises } from "@/lib/api/admin-exercises";
 import { ExercisesManager } from "./exercises-manager";
 
 export const metadata = { title: "운동 종목" };

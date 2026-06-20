@@ -1,16 +1,16 @@
-from datetime import datetime, timezone
+from datetime import datetime
+
+from app.models.mixins import KST
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ai.face.face_recognizer import MODEL_VERSION, encoding_to_bytes, extract_encoding
 from app.models.enums import UserStatus
 from app.models.user import User
 from app.repositories.user import UserRepository
 from app.schemas.user import (
     AgreementCreateRequest,
     AgreementRead,
-    FaceRegistrationResponse,
     RegistrationStep,
     UserDetailRead,
     UserDetailUpsertRequest,
@@ -45,8 +45,6 @@ class UserService:
             step = RegistrationStep.agreements_required
         elif user.detail is None:
             step = RegistrationStep.detail_required
-        elif user.face_embedding is None:
-            step = RegistrationStep.face_required
         else:
             step = RegistrationStep.complete
 
@@ -82,7 +80,7 @@ class UserService:
         if user is None:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
         user.status = UserStatus.withdrawn
-        user.withdrawn_at = datetime.now(timezone.utc)
+        user.withdrawn_at = datetime.now(KST)
         await self.db.commit()
 
     async def submit_agreements(
@@ -121,46 +119,3 @@ class UserService:
         await self.db.refresh(detail)
         return UserDetailRead.model_validate(detail)
 
-    async def register_face(
-        self, user_id: int, image_bytes: bytes, *, replace: bool
-    ) -> FaceRegistrationResponse:
-        if not image_bytes:
-            raise HTTPException(status_code=422, detail="이미지가 비어 있습니다")
-
-        existing = await self.repo.get_face(user_id)
-        if existing is not None:
-            if not replace:
-                raise HTTPException(
-                    status_code=409,
-                    detail="이미 얼굴이 등록되어 있습니다 (FACE_ALREADY_REGISTERED). 재등록은 PUT 사용",
-                )
-            await self.repo.delete_face(existing)
-            await self.db.flush()
-
-        try:
-            encoding = extract_encoding(image_bytes)
-        except ValueError as e:
-            code = str(e)
-            detail = (
-                "프레임에서 얼굴을 찾을 수 없습니다. 타원 안에 얼굴을 맞춰 주세요."
-                if code == "FACE_NOT_DETECTED"
-                else "얼굴이 두 명 이상 감지됐습니다. 혼자 촬영해 주세요."
-            )
-            raise HTTPException(status_code=422, detail=detail)
-
-        embedding = encoding_to_bytes(encoding)
-        face = await self.repo.create_face(
-            user_id, embedding, MODEL_VERSION
-        )
-        await self.db.commit()
-        await self.db.refresh(face)
-        return FaceRegistrationResponse(
-            registered_at=face.registered_at, model_version=face.model_version
-        )
-
-    async def delete_face(self, user_id: int) -> None:
-        face = await self.repo.get_face(user_id)
-        if face is None:
-            raise HTTPException(status_code=404, detail="등록된 얼굴이 없습니다")
-        await self.repo.delete_face(face)
-        await self.db.commit()

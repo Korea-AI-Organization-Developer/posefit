@@ -3,7 +3,9 @@ __pycache__/
 *.py[cod]
 *.pyo
 venv/
+*/.venv/
 .venv/
+*/venv/
 *.egg-info/
 .pytest_cache/
 *.log
@@ -16,7 +18,9 @@ venv/
 
 # IDE
 .idea/
+*/.idea/
 .vscode/
+*/.vscode/
 .claude/
 */.claude/
 
@@ -25,17 +29,19 @@ venv/
 Thumbs.db
 desktop.ini
 
-# Next.js
-.next/
-out/
-node_modules/
-*.tsbuildinfo
-npm-debug.log*
+# test_data
+*/data
+/data
 
-# AI model weights
+# 업로드 파일
+backend/uploads/
+
+# 생성 파일
 *.pt
 *.pth
 *.onnx
 *.bin
 *.pkl
 *.pickle
+*_2[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.json
+output.json
