@@ -4,12 +4,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
+from app.schemas.auth import AuthSocialCallbackRequest
 from app.schemas.dashboard import DashboardResponse
 from app.schemas.user import (
     AgreementCreateRequest,
     AgreementRead,
     FaceDetectResponse,
     FaceRegistrationResponse,
+    SocialAccountRead,
     UserDetailRead,
     UserDetailUpsertRequest,
     UserRead,
@@ -116,6 +118,38 @@ async def delete_face(
     user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     await UserService(db).delete_face(user.id)
+
+
+# ─── 소셜 계정 ───
+@router.get("/social-accounts", response_model=list[SocialAccountRead])
+async def list_social_accounts(
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    return await UserService(db).list_social_accounts(user.id)
+
+
+@router.post(
+    "/social-accounts/{provider}:link",
+    response_model=SocialAccountRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def link_social_account(
+    provider: str,
+    body: AuthSocialCallbackRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await UserService(db).link_social_account(user.id, provider, body.code, body.redirect_uri)
+
+
+@router.delete("/social-accounts/{provider}/{provider_uid}", status_code=status.HTTP_204_NO_CONTENT)
+async def unlink_social_account(
+    provider: str,
+    provider_uid: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await UserService(db).unlink_social_account(user.id, provider, provider_uid)
 
 
 # ─── 대시보드 ───
