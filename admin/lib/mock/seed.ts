@@ -173,7 +173,6 @@ export const SESSIONS: AdminSessionListItem[] = Array.from(
     const dynamic = exercise.exerciseType === "dynamic";
     return {
       id: 1000 + i,
-      userId: (i % USERS.length) + 1,
       exercise: { id: exercise.id, nameKo: exercise.nameKo },
       status,
       startedAt: daysAgoIso(i, 7 + (i % 12), (i * 11) % 60),

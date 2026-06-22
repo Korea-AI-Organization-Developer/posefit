@@ -4,25 +4,16 @@ import { Download } from "lucide-react";
 
 import { Button } from "@/components/ui";
 import type { AdminSessionListItem } from "@/lib/api/types";
-import {
-  generateFrames,
-  toJsonl,
-  toSessionJson,
-} from "@/lib/mock/frames";
 
-function download(filename: string, content: string, mime: string) {
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
+function triggerDownload(url: string) {
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename;
   a.click();
-  URL.revokeObjectURL(url);
 }
 
 /** 단일 세션 내보내기 (JSONL / JSON) */
 export function ExportButton({ session }: { session: AdminSessionListItem }) {
-  const frames = () => generateFrames(session);
+  const base = `/api/admin/exports/keypoints?sessionId=${session.id}`;
 
   return (
     <div className="flex justify-end gap-1.5">
@@ -30,26 +21,14 @@ export function ExportButton({ session }: { session: AdminSessionListItem }) {
         size="sm"
         variant="secondary"
         leftIcon={<Download aria-hidden />}
-        onClick={() =>
-          download(
-            `keypoints_session_${session.id}.jsonl`,
-            toJsonl(frames()),
-            "application/x-ndjson",
-          )
-        }
+        onClick={() => triggerDownload(`${base}&format=jsonl`)}
       >
         JSONL
       </Button>
       <Button
         size="sm"
         variant="secondary"
-        onClick={() =>
-          download(
-            `keypoints_session_${session.id}.json`,
-            toSessionJson(session, frames()),
-            "application/json",
-          )
-        }
+        onClick={() => triggerDownload(`${base}&format=json`)}
       >
         JSON
       </Button>
@@ -57,16 +36,24 @@ export function ExportButton({ session }: { session: AdminSessionListItem }) {
   );
 }
 
-/** 여러 세션을 하나의 JSONL 로 묶어 내보내기 (학습 데이터셋) */
+/** 현재 필터 기준 전체 세션을 하나의 JSONL 로 내보내기 */
 export function BulkExportButton({
   sessions,
+  exerciseId,
+  from,
+  to,
 }: {
   sessions: AdminSessionListItem[];
+  exerciseId: string;
+  from: string;
+  to: string;
 }) {
   function exportAll() {
-    const all = sessions.flatMap((s) => generateFrames(s));
-    const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "");
-    download(`keypoints_${ts}.jsonl`, toJsonl(all), "application/x-ndjson");
+    const qs = new URLSearchParams({ format: "jsonl" });
+    if (exerciseId) qs.set("exerciseId", exerciseId);
+    if (from) qs.set("from", new Date(from).toISOString());
+    if (to) qs.set("to", new Date(to).toISOString());
+    triggerDownload(`/api/admin/exports/keypoints?${qs.toString()}`);
   }
 
   return (

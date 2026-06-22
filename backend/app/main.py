@@ -8,6 +8,7 @@ from app.routers import (
     admin_audit,
     admin_auth,
     admin_exercises,
+    admin_exports,
     admin_llm,
     admin_stats,
     admin_users,
@@ -48,6 +49,7 @@ app.include_router(admin_auth.router, prefix="/api/v1")
 app.include_router(admin_users.router, prefix="/api/v1")
 app.include_router(admin_exercises.router, prefix="/api/v1")
 app.include_router(admin_llm.router, prefix="/api/v1")
+app.include_router(admin_exports.router, prefix="/api/v1")
 app.include_router(admin_stats.router, prefix="/api/v1")
 app.include_router(admin_audit.router, prefix="/api/v1")
 

@@ -1787,9 +1787,9 @@ paths:
       security:
         - adminBearerAuth: []
       parameters:
-        - name: userId
+        - name: status
           in: query
-          schema: { type: integer, format: int64 }
+          schema: { type: string, enum: [in_progress, completed, aborted] }
         - name: exerciseId
           in: query
           schema: { type: integer, format: int64 }
@@ -3213,10 +3213,9 @@ components:
 
     AdminSessionListItem:
       type: object
-      required: [id, userId, exercise, status, startedAt, saved]
+      required: [id, exercise, status, startedAt, saved]
       properties:
         id: { type: integer, format: int64 }
-        userId: { type: integer, format: int64 }
         exercise: { $ref: '#/components/schemas/EmbeddedExercise' }
         status: { type: string, enum: [in_progress, completed, aborted] }
         startedAt: { type: string, format: date-time }
