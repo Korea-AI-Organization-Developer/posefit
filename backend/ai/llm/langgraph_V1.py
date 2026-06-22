@@ -2114,53 +2114,108 @@ _LONG_TERM_MAX_ITEMS = 60
 
 
 def _long_term_llm(state: FeedbackState):
-    """state.api_key(또는 환경변수)로 LLM 생성. 키 없으면 None → 노드가 빈 결과 반환."""
+    """state.api_key(또는 환경변수)로 LLM 생성. 키 없으면 None → 노드가 빈 결과 반환.
+
+    thinking_budget=0 으로 Gemini 2.5 의 추론(thinking) 모드를 꺼 응답 속도를 단축한다
+    (8~30초 → 3~5초). 미지원 모델이면 일반 생성으로 폴백.
+    """
     api_key = state.get("api_key") or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not api_key:
         return None
     model = state.get("model") or os.getenv("GEMINI_MODEL", GEMINI_MODEL)
-    return ChatGoogleGenerativeAI(model=model, api_key=api_key, temperature=0.4)
+    try:
+        return ChatGoogleGenerativeAI(
+            model=model, api_key=api_key, temperature=0.4, thinking_budget=0
+        )
+    except Exception:  # noqa: BLE001 — thinking_budget 미지원 모델 폴백
+        return ChatGoogleGenerativeAI(model=model, api_key=api_key, temperature=0.4)
 
 
-def _build_long_term_prompt(feedback_texts: List[str], stats: Dict[str, Any]) -> str:
+def _summarize_analysis_history(analysis_results: List[Dict[str, Any]]) -> List[str]:
+    """누적 analysis_result 에서 오류별 발생 빈도·심각도를 집계해 프롬프트 라인으로."""
+    from collections import Counter
+
+    total = len(analysis_results)
+    error_counter: Counter = Counter()
+    severity_by_error: Dict[str, List[str]] = {}
+
+    for ar in analysis_results:
+        if not isinstance(ar, dict):
+            continue
+        seen_in_session = set()
+        for err in ar.get("errors", []):
+            if not isinstance(err, dict):
+                continue
+            code = err.get("error_code") or err.get("issue")
+            name = err.get("error_name") or err.get("description") or code
+            if not code:
+                continue
+            key = f"{name}({code})"
+            if key not in seen_in_session:  # 세션당 1회 카운트
+                error_counter[key] += 1
+                seen_in_session.add(key)
+            sev = err.get("severity")
+            if sev:
+                severity_by_error.setdefault(key, []).append(str(sev))
+
+    lines: List[str] = []
+    for key, cnt in error_counter.most_common(10):
+        sevs = severity_by_error.get(key, [])
+        sev_txt = f", 심각도: {'/'.join(dict.fromkeys(sevs))}" if sevs else ""
+        lines.append(f"- {key}: 최근 {total}개 세션 중 {cnt}회 발생{sev_txt}")
+    return lines
+
+
+def _build_long_term_prompt(
+    feedback_texts: List[str],
+    analysis_results: List[Dict[str, Any]],
+    stats: Dict[str, Any],
+) -> str:
     sessions_count = stats.get("sessions_count")
     avg_score = stats.get("avg_score")
     best_exercise = stats.get("best_exercise")
     avg_text = f"{avg_score:.1f}점" if isinstance(avg_score, (int, float)) else "기록 없음"
     best_text = best_exercise or "기록 없음"
+
+    analysis_lines = _summarize_analysis_history(analysis_results)
+    analysis_block = "\n".join(analysis_lines) if analysis_lines else "구조화된 자세분석 기록 없음"
     numbered = "\n".join(
         f"{i + 1}. {text}" for i, text in enumerate(feedback_texts[:_LONG_TERM_MAX_ITEMS])
-    )
+    ) or "자연어 피드백 기록 없음"
+
     return (
         "당신은 운동 자세 코칭 전문 AI입니다.\n"
-        "아래는 한 사용자가 그동안 운동하며 받은 자세 피드백 기록입니다.\n"
-        "이 기록 전체를 종합하여, 사용자의 장기적인 자세 경향과 개선 방향을 평가하세요.\n\n"
+        "아래는 한 사용자의 누적 자세분석 결과와 피드백 기록입니다.\n"
+        "이 기록 전체를 종합하여, 사용자의 장기적인 자세 경향·개선 추이·핵심 문제를 평가하세요.\n\n"
         "=== 누적 통계 ===\n"
         f"총 운동 횟수: {sessions_count}회\n"
         f"평균 점수: {avg_text}\n"
         f"가장 잘하는 종목: {best_text}\n\n"
-        "=== 피드백 기록 (최신순) ===\n"
+        "=== 자세분석 누적 결과 (오류별 발생 빈도, 최신 세션 우선) ===\n"
+        f"{analysis_block}\n\n"
+        "=== 자연어 피드백 기록 (최신순) ===\n"
         f"{numbered}\n\n"
         "=== 작성 규칙 ===\n"
-        "- 반복적으로 나타나는 자세 문제를 찾아내세요.\n"
-        "- 잘하고 있는 점(positive), 개선 팁(tip), 주의할 점(warning)을 균형 있게 제시하세요.\n"
-        "- 각 메시지는 1~2문장의 친근한 한국어로 작성하세요.\n"
-        "- 메시지는 3~5개로 작성하세요.\n"
-        "- 기록에 없는 내용을 지어내지 마세요.\n\n"
+        "- 위 자세분석 결과의 반복 오류와 심각도를 우선 근거로 삼으세요.\n"
+        "- improvement_trend: 시간에 따라 나아지는지/정체인지/악화인지 평가하세요.\n"
+        "- long_term_issue: 가장 자주·심각하게 반복되는 핵심 문제 1~2가지를 짚으세요.\n"
+        "- messages: 잘하는 점(positive)·개선 팁(tip)·주의할 점(warning)을 균형 있게 3~5개.\n"
+        "- 각 문장은 1~2문장의 친근한 한국어로, 기록에 없는 내용은 지어내지 마세요.\n\n"
         "반드시 아래 JSON 형식으로만 응답하세요:\n"
-        '{"summary": "2~3문장 종합 평가", '
+        '{"summary": "2~3문장 종합 평가", "improvement_trend": "...", "long_term_issue": "...", '
         '"messages": [{"type": "positive", "text": "..."}, {"type": "tip", "text": "..."}]}'
     )
 
 
 def _parse_long_term_json(raw: str) -> Dict[str, Any]:
+    empty = {"summary": "", "improvement_trend": "", "long_term_issue": "", "messages": []}
     match = re.search(r"\{[\s\S]*\}", raw or "")
     if not match:
-        return {"summary": "", "messages": []}
+        return empty
     try:
         parsed = json.loads(match.group())
     except json.JSONDecodeError:
-        return {"summary": "", "messages": []}
+        return empty
 
     messages: List[Dict[str, str]] = []
     for item in parsed.get("messages", []) if isinstance(parsed.get("messages"), list) else []:
@@ -2170,19 +2225,27 @@ def _parse_long_term_json(raw: str) -> Dict[str, Any]:
         text = str(item.get("text") or "").strip()
         if msg_type in _LONG_TERM_VALID_TYPES and text:
             messages.append({"type": msg_type, "text": text})
-    return {"summary": str(parsed.get("summary") or "").strip(), "messages": messages}
+    return {
+        "summary": str(parsed.get("summary") or "").strip(),
+        "improvement_trend": str(parsed.get("improvement_trend") or "").strip(),
+        "long_term_issue": str(parsed.get("long_term_issue") or "").strip(),
+        "messages": messages,
+    }
 
 
 def long_term_feedback_node(state:FeedbackState) -> dict:
     print("종합운동 평가 노드")
     feedback_texts = state.get("historical_feedback_texts") or []
+    analysis_results = state.get("historical_analysis_results") or []
     stats = state.get("report_stats") or {}
 
     llm = _long_term_llm(state)
-    if llm is None or not feedback_texts:
-        return {"exercise_long_term_feedback": {"summary": "", "messages": []}}
+    if llm is None or (not feedback_texts and not analysis_results):
+        return {"exercise_long_term_feedback": dict(
+            summary="", improvement_trend="", long_term_issue="", messages=[]
+        )}
 
-    prompt = _build_long_term_prompt(feedback_texts, stats)
+    prompt = _build_long_term_prompt(feedback_texts, analysis_results, stats)
     try:
         response = llm.invoke([HumanMessage(content=prompt)])
         raw = response.content
@@ -2190,7 +2253,9 @@ def long_term_feedback_node(state:FeedbackState) -> dict:
             raw = "\n".join(p["text"] for p in raw if isinstance(p, dict) and "text" in p)
     except Exception as exc:  # noqa: BLE001 — 실패는 빈 결과로(서비스가 규칙 기반 폴백)
         return {
-            "exercise_long_term_feedback": {"summary": "", "messages": []},
+            "exercise_long_term_feedback": dict(
+                summary="", improvement_trend="", long_term_issue="", messages=[]
+            ),
             "errors": [f"long_term LLM 호출 실패: {exc}"],
         }
 
@@ -2202,6 +2267,8 @@ def long_text_summarize_node(state:FeedbackState) -> dict:
     return {
         "feedback_text": {
             "summary": fb.get("summary", ""),
+            "improvement_trend": fb.get("improvement_trend", ""),
+            "long_term_issue": fb.get("long_term_issue", ""),
             "messages": fb.get("messages", []),
         }
     }
@@ -2213,6 +2280,8 @@ def long_review_node(state:FeedbackState) -> dict:
         "final_feedback": {
             "type": "long_term",
             "summary": fb.get("summary", ""),
+            "improvement_trend": fb.get("improvement_trend", ""),
+            "long_term_issue": fb.get("long_term_issue", ""),
             "messages": fb.get("messages", []),
         }
     }

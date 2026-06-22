@@ -15,6 +15,7 @@ from app.models.user import (
 from app.models.workout import (
     Feedback,
     KeypointFrame,
+    WorkoutAnalysis,
     WorkoutDailyStat,
     WorkoutSession,
 )
@@ -29,6 +30,7 @@ __all__ = [
     "WorkoutSession",
     "KeypointFrame",
     "Feedback",
+    "WorkoutAnalysis",
     "WorkoutDailyStat",
     "AdminAccount",
     "LlmModel",

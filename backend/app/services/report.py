@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories.report import ReportRepository
 from app.repositories.feedback import FeedbackRepository
 from app.repositories.user import UserRepository
+from app.repositories.workout_analysis import WorkoutAnalysisRepository
 import asyncio
 import logging
 
@@ -30,7 +31,9 @@ from app.schemas.report import (
 logger = logging.getLogger(__name__)
 
 # LangGraph 종합 평가 최대 대기(초). 초과 시 규칙 기반으로 폴백한다.
-_AI_EVALUATION_TIMEOUT_SEC = 20
+# thinking_budget=0 적용으로 응답이 3~5초 수준 → 여유 있게 25초.
+# (더 빠른 응답이 필요하면 GEMINI_MODEL 을 gemini-2.5-flash-lite 로 변경: ~3초)
+_AI_EVALUATION_TIMEOUT_SEC = 25
 
 # 칼로리 계산용 운동별 MET (kcal = MET × 체중kg × 시간h).
 # workout_calendar.html 의 per-rep 계수를 MET 로 환산한 값.
@@ -273,7 +276,11 @@ class ReportService:
         feedback_texts = await FeedbackRepository(self.db).list_recent_contents(
             user_id, exercise_id, limit=60
         )
-        if not feedback_texts:
+        # V1 설계 핵심 입력 — 누적 구조화 자세분석 결과(있으면 long_term 의 1순위 근거)
+        analysis_results = await WorkoutAnalysisRepository(self.db).list_recent_results(
+            user_id, exercise_id, limit=30
+        )
+        if not feedback_texts and not analysis_results:
             return None
 
         stats = {
@@ -292,7 +299,14 @@ class ReportService:
             # langgraph_V1 의 통합 그래프(long_term 분기)를 호출한다.
             # chromadb 등 무거운 의존성을 끌어오므로 lazy import + to_thread(동기 그래프).
             result = await asyncio.wait_for(
-                asyncio.to_thread(self._run_long_term_graph, feedback_texts, stats, api_key, settings.gemini_model),
+                asyncio.to_thread(
+                    self._run_long_term_graph,
+                    feedback_texts,
+                    analysis_results,
+                    stats,
+                    api_key,
+                    settings.gemini_model,
+                ),
                 timeout=_AI_EVALUATION_TIMEOUT_SEC,
             )
         except Exception as exc:  # noqa: BLE001 — 어떤 실패든 규칙 기반으로 폴백
@@ -321,13 +335,18 @@ class ReportService:
 
     @staticmethod
     def _run_long_term_graph(
-        feedback_texts: list[str], stats: dict, api_key: str, model: str
+        feedback_texts: list[str],
+        analysis_results: list[dict],
+        stats: dict,
+        api_key: str,
+        model: str,
     ) -> dict | None:
         """langgraph_V1 통합 그래프를 long_term 분기로 실행(동기). final_feedback 반환."""
         from ai.llm.langgraph_V1 import posefit_graph
 
         result = posefit_graph.invoke({
             "historical_feedback_texts": feedback_texts,
+            "historical_analysis_results": analysis_results,
             "report_stats": stats,
             "api_key": api_key,
             "model": model,

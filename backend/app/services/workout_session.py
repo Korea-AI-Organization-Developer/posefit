@@ -89,9 +89,46 @@ class WorkoutSessionService:
             video_url=video_url,
         )
         await self.db.commit()
+
+        # 구조화 자세분석 결과 저장 (리포트 종합평가 long_term 입력). 실패해도 세션 저장엔 영향 없음.
+        await self._save_pose_analysis(session.id, user_id, exercise_id, points)
+
         # comment = await getLlmFeedback(피드백 위치 , points)
         comment = await getLlmFeedback()
         return StopSessionResponse(session_id=session.id, video_url=video_url, comment=comment)
+
+    async def _save_pose_analysis(
+        self, session_id: int, user_id: int, exercise_id: int, normalized_pose
+    ) -> None:
+        """정규화 pose → 분석 노드 실행 → workout_analyses 저장. 어떤 실패든 무시."""
+        import asyncio
+        import logging
+
+        from app.models.workout import WorkoutAnalysis
+
+        try:
+            exercise = await self.exercise_repo.get_by_id(exercise_id)
+            if exercise is None or not isinstance(normalized_pose, dict):
+                return
+
+            from ai.llm.analysis_runner import run_pose_analysis
+
+            analysis = await asyncio.to_thread(
+                run_pose_analysis, normalized_pose, exercise.name_ko
+            )
+            if not analysis:  # rule config 미존재 종목 등 → 저장 스킵
+                return
+
+            self.db.add(WorkoutAnalysis(
+                session_id=session_id,
+                user_id=user_id,
+                exercise_id=exercise_id,
+                analysis_result=analysis,
+                overall_status=analysis.get("overall_status"),
+            ))
+            await self.db.commit()
+        except Exception as exc:  # noqa: BLE001 — 분석 저장 실패가 세션 저장을 깨지 않도록
+            logging.getLogger(__name__).warning("자세분석 저장 실패(무시): %s", exc)
 
     async def save_video(self, session_id: int, user_id: int) -> None:
         session = await self.repo.get_by_id(session_id)
