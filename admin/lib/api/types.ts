@@ -107,6 +107,10 @@ export interface TimeseriesPoint {
   sessions: number;
 }
 
+export interface StatsTimeseries {
+  points: TimeseriesPoint[];
+}
+
 export interface AuditLog {
   id: number;
   adminId: number;

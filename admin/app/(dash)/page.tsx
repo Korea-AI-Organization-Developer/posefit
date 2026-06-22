@@ -1,15 +1,12 @@
 import Link from "next/link";
 import { Sparkles, ArrowRight } from "lucide-react";
 
-import { TrendChart } from "@/components/charts/trend-chart";
 import { Badge, Card, CardBody, CardHeader } from "@/components/ui";
 import { PROVIDER_LABEL } from "@/lib/labels";
 import { formatNumber, formatScore } from "@/lib/format";
-import {
-  getStatsOverview,
-  getTimeseries,
-  listLlmModels,
-} from "@/lib/mock/admin-api";
+import { getStatsOverview, getTimeseries } from "@/lib/api/admin-stats";
+import { listLlmModels } from "@/lib/api/admin-llm";
+import { TimeseriesSection } from "./timeseries-section";
 
 export const metadata = { title: "대시보드" };
 
@@ -32,9 +29,13 @@ function StatCard({
 }
 
 export default async function DashboardPage() {
-  const [overview, points, models] = await Promise.all([
+  const to = new Date();
+  const from = new Date(to);
+  from.setDate(from.getDate() - 29);
+
+  const [overview, timeseries, models] = await Promise.all([
     getStatsOverview(),
-    getTimeseries(),
+    getTimeseries(from.toISOString(), to.toISOString()),
     listLlmModels(),
   ]);
   const activeModel = models.find((m) => m.isActive);
@@ -72,15 +73,7 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.6fr_1fr]">
-        <Card>
-          <CardHeader>
-            <h3 className="text-sm font-semibold">최근 30일 추이</h3>
-            <span className="text-xs text-text-subtle">가입 · 세션</span>
-          </CardHeader>
-          <CardBody>
-            <TrendChart points={points} />
-          </CardBody>
-        </Card>
+        <TimeseriesSection initialPoints={timeseries.points} />
 
         <Card>
           <CardHeader>
