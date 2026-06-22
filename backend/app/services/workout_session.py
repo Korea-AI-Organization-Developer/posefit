@@ -12,6 +12,9 @@ from app.repositories.workout_session import WorkoutSessionRepository
 from app.schemas.workout import StopSessionResponse
 from app.schemas.workout_session import WorkoutSessionCreateRequest, WorkoutSessionRead
 
+# 포즈 추정 모델
+from ai.pose.mediapipe_estimatorV2 import vision
+
 UPLOAD_DIR = Path("uploads/workout_sessions")
 VIDEO_SAVE_BASE = Path("C:/posefit_saves")
 
@@ -70,7 +73,14 @@ class WorkoutSessionService:
         file_path.write_bytes(content)
 
         video_url = f"/uploads/workout_sessions/{filename}"
-
+        workout_point_model = vision
+        points = workout_point_model(
+                                        video_url = video_url,
+                                        user_id = user_id,
+                                        exercise_id= exercise_id,
+                                        start_at=start_at,
+                                        fps= 30  # fps변경 시 이곳을 참조
+                                    )
         session = await self.repo.create(
             user_id=user_id,
             exercise_id=exercise_id,
@@ -79,7 +89,7 @@ class WorkoutSessionService:
             video_url=video_url,
         )
         await self.db.commit()
-
+        # comment = await getLlmFeedback(피드백 위치 , points)
         comment = await getLlmFeedback()
         return StopSessionResponse(session_id=session.id, video_url=video_url, comment=comment)
 
