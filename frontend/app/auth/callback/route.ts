@@ -17,7 +17,11 @@ import { STEP_DEST } from "@/lib/auth/steps";
  * registrationStep에 따라 온보딩 단계 또는 대시보드로 리다이렉트한다.
  */
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = request.nextUrl;
+  const { searchParams } = request.nextUrl;
+  // 리버스 프록시(Cloudflare Tunnel 등) 뒤에서는 x-forwarded-* 헤더로 실제 origin 을 복원한다.
+  const fwdProto = request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol.replace(":", "");
+  const fwdHost = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? request.nextUrl.host;
+  const origin = `${fwdProto}://${fwdHost}`;
   const code = searchParams.get("code");
   const state = searchParams.get("state");
 
