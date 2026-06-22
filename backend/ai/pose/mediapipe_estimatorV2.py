@@ -503,7 +503,11 @@ def vision(
             "video_url": video_url,
         },
     )
-    return estimator.run()["normalized"]
+    result = estimator.run()
+    return {
+        "normalized":     result["normalized"],
+        "norm_json_path": result["norm_json_path"],
+    }
 
 
 def run_batch(
