@@ -13,7 +13,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: "대시보드", href: "/dashboard" },
-  { label: "운동하기", href: "/workout/face-gate", activePrefix: "/workout" },
+  { label: "운동하기", href: "/exercises", activePrefix: "/exercise" },
   { label: "리포트", href: "/reports" },
   { label: "설정", href: "/settings" },
 ];

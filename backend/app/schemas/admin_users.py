@@ -36,6 +36,5 @@ class AdminUserDetail(CamelModel):
     gender: Gender | None
     height: float | None
     weight: float | None
-    face_registered: bool
     marketing_agreed: bool | None
     session_count: int

@@ -49,7 +49,6 @@
 #   생년월일·성별·키·체중 입력          → PUT  /users/me/detail
 # SCR-04 얼굴 캡처 (신규 가입)
 #   실시간 얼굴 감지 폴링 (1.5s 간격)   → POST /users/me/face/detect
-#   정면 얼굴 등록                      → POST /users/me/face
 #
 # SCR-05 메인 대시보드
 #   진입 — KPI 카드 3종                → GET  /users/me/dashboard
@@ -129,7 +128,7 @@
 #         +details+face)                       (users+social_accounts 트랜잭션)
 #                                          + POST /users/me/agreements  (agreements)
 #                                          + PUT  /users/me/detail      (user_details)
-#                                          + POST /users/me/face        (face_embeddings)
+#                                          (face_embeddings 등록 제외)
 #  Q-W2  세션 생성                         → POST /workout-sessions
 #  Q-W3  (향후 발전, 주석) 프레임 bulk insert → POST /workout-sessions/{id}/frames
 #  Q-W4  STOP 영상 업로드 + 점수/피드백 + daily_stats UPSERT
@@ -557,35 +556,6 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
   /users/me/face:
-    post:
-      tags: [Users]
-      operationId: registerFace
-      summary: 얼굴 임베딩 등록 (SCR-04, 가입 마지막 단계 1회)
-      description: |
-        AUTH-03. 신규 가입 흐름의 마지막 단계 (registrationStep=face_required).
-        이미 등록되어 있으면 409 FACE_ALREADY_REGISTERED (재등록은 PUT 사용).
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/FaceRegistrationForm'
-      responses:
-        '201':
-          description: 등록 완료
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FaceRegistrationResponse'
-              example:
-                registeredAt: "2026-05-26T09:13:10Z"
-                modelVersion: "dlib-v1"
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
     put:
       tags: [Users]
       operationId: replaceFace

@@ -7,7 +7,6 @@ from app.models.admin import AdminAccount, AdminAuditLog, LlmModel
 from app.models.exercise import Exercise
 from app.models.user import (
     Agreement,
-    FaceEmbedding,
     SocialAccount,
     User,
     UserDetail,
@@ -25,7 +24,6 @@ __all__ = [
     "UserDetail",
     "SocialAccount",
     "Agreement",
-    "FaceEmbedding",
     "Exercise",
     "WorkoutSession",
     "KeypointFrame",

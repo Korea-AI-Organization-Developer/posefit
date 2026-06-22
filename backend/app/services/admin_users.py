@@ -56,7 +56,6 @@ class AdminUsersService:
             gender=detail.gender if detail else None,
             height=float(detail.height) if detail and detail.height is not None else None,
             weight=float(detail.weight) if detail and detail.weight is not None else None,
-            face_registered=user.face_embedding is not None,
             marketing_agreed=user.agreement.marketing_agreed if user.agreement else None,
             session_count=session_count,
         )

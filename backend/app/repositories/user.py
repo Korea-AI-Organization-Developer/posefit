@@ -4,7 +4,6 @@ from sqlalchemy.orm import selectinload
 
 from app.models.user import (
     Agreement,
-    FaceEmbedding,
     SocialAccount,
     User,
     UserDetail,
@@ -30,7 +29,6 @@ class UserRepository:
             .options(
                 selectinload(User.social_accounts),
                 selectinload(User.detail),
-                selectinload(User.face_embedding),
             )
         )
         return result.scalar_one_or_none()
@@ -158,24 +156,3 @@ class UserRepository:
         self.db.add(detail)
         return detail
 
-    # ─── FaceEmbedding (1:1) ───
-    async def get_face(self, user_id: int) -> FaceEmbedding | None:
-        result = await self.db.execute(
-            select(FaceEmbedding).where(FaceEmbedding.user_id == user_id)
-        )
-        return result.scalar_one_or_none()
-
-    async def create_face(
-        self, user_id: int, embedding: bytes, model_version: str
-    ) -> FaceEmbedding:
-        face = FaceEmbedding(
-            user_id=user_id,
-            embedding=embedding,
-            model_version=model_version,
-        )
-        self.db.add(face)
-        await self.db.flush()
-        return face
-
-    async def delete_face(self, face: FaceEmbedding) -> None:
-        await self.db.delete(face)
