@@ -100,14 +100,12 @@ export async function listLlmModels(): Promise<LlmModel[]> {
 }
 
 export async function listSessions(params: {
-  userId?: number;
   exerciseId?: number;
   page?: number;
   size?: number;
 }): Promise<Page<AdminSessionListItem>> {
-  const { userId, exerciseId, page = 1, size = 10 } = params;
+  const { exerciseId, page = 1, size = 10 } = params;
   let rows = SESSIONS.slice();
-  if (userId) rows = rows.filter((s) => s.userId === userId);
   if (exerciseId) rows = rows.filter((s) => s.exercise.id === exerciseId);
   return paginate(rows, page, size);
 }

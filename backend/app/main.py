@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from app.routers import (
     admin_auth,
     admin_exercises,
+    admin_exports,
     admin_llm,
     admin_users,
     auth,
@@ -46,6 +47,7 @@ app.include_router(admin_auth.router, prefix="/api/v1")
 app.include_router(admin_users.router, prefix="/api/v1")
 app.include_router(admin_exercises.router, prefix="/api/v1")
 app.include_router(admin_llm.router, prefix="/api/v1")
+app.include_router(admin_exports.router, prefix="/api/v1")
 
 
 @app.get("/health")
