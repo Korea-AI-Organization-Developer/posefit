@@ -4,7 +4,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.admin import AdminAuditLog
 from app.models.enums import UserStatus
-from app.models.user import Agreement, FaceEmbedding, SocialAccount, User, UserDetail
+from app.models.user import Agreement, SocialAccount, User, UserDetail
 from app.models.workout import WorkoutSession
 
 
@@ -71,7 +71,6 @@ class AdminUsersRepository:
                 .where(User.id == user_id)
                 .options(
                     selectinload(User.detail),
-                    selectinload(User.face_embedding),
                     selectinload(User.agreement),
                     selectinload(User.social_accounts),
                 )

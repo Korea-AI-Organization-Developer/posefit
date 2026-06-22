@@ -32,7 +32,7 @@ export default async function ExerciseDetailPage({
     <div className="mx-auto w-full max-w-6xl px-6 py-10">
       <header className="flex items-center gap-3 border-b border-border pb-4">
         <Link
-          href="/workout"
+          href="/exercises"
           aria-label="운동 선택으로"
           className="inline-flex size-9 items-center justify-center rounded-sm text-text-muted transition-colors duration-150 ease-out hover:bg-surface-muted hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-4"
         >

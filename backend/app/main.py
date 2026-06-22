@@ -20,7 +20,6 @@ from app.routers import (
     feedback,
     report,
     users,
-    workout,
     workout_session,
 )
 
@@ -63,7 +62,6 @@ app.include_router(users.router, prefix="/api/v1")
 app.include_router(exercise.router, prefix="/api/v1")
 app.include_router(feedback.router, prefix="/api/v1")
 app.include_router(report.router, prefix="/api/v1")
-app.include_router(workout.router, prefix="/api/v1")
 app.include_router(workout_session.router, prefix="/api/v1")
 app.include_router(admin_auth.router, prefix="/api/v1")
 app.include_router(admin_users.router, prefix="/api/v1")

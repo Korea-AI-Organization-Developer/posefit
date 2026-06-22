@@ -9,7 +9,6 @@ import { getSocialAccounts } from "@/lib/api/social-accounts";
 import { getVideosSummary } from "@/lib/mock/videos";
 import { saveProfileAction } from "./actions";
 import { AccountSection } from "./account-section";
-import { FaceSection } from "./face-section";
 import { MarketingToggle } from "./marketing-toggle";
 import { SocialSection } from "./social-section";
 import { VideosSection } from "./videos-section";
@@ -62,9 +61,6 @@ export default async function SettingsPage({
     getVideosSummary(),
   ]);
 
-  // face_embeddings 유무는 registrationStep 으로 파생 (complete = 얼굴 등록됨)
-  const faceRegistered = me.registrationStep === "complete";
-
   return (
     <div className="mx-auto w-full max-w-2xl px-6 py-10">
       <header>
@@ -102,11 +98,6 @@ export default async function SettingsPage({
           <MarketingToggle
             initialAgreed={agreement?.marketingAgreed ?? false}
           />
-        </Section>
-
-        {/* SET-04·05 — 얼굴 인증 */}
-        <Section title="얼굴 인증">
-          <FaceSection registered={faceRegistered} />
         </Section>
 
         {/* SET-06 — 연결된 소셜 계정 */}
