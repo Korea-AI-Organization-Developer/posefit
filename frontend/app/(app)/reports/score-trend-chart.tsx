@@ -2,7 +2,7 @@
 
 import { type MouseEvent, useMemo, useRef, useState } from "react";
 import { formatDay, formatScore } from "@/lib/format";
-import type { ScoreTrendSeries } from "@/lib/mock/reports";
+import type { ScoreTrendSeries } from "@/lib/api/reports";
 
 /* viewBox 좌표계 — 컨테이너 너비에 맞춰 반응형으로 스케일된다. */
 const W = 640;

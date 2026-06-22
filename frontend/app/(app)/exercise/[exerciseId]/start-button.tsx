@@ -5,7 +5,7 @@ import { useTransition } from "react";
 import { Play } from "lucide-react";
 
 import { Button } from "@/components/ui";
-import { createSession } from "@/lib/mock/workout-session";
+import { createSession } from "@/lib/api/workout-session";
 
 /* SCR-07 "운동 시작하기" — createSession(POST /workout-sessions) 후 실행 화면으로 */
 export function StartButton({ exerciseId }: { exerciseId: number }) {

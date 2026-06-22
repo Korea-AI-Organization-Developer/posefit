@@ -4,6 +4,20 @@ import type { ReportPeriod, ReportSummary, ScoreTrendResponse } from "./types";
 export type { ReportPeriod, ReportSummary, ScoreTrendResponse } from "./types";
 export type TrendDays = 7 | 30 | 90;
 
+export interface CalendarDay {
+  date: string;
+  sessionsCount: number;
+  avgScore: number | null;
+}
+
+export interface CalendarResponse {
+  days: CalendarDay[];
+}
+
+export async function getCalendar(days = 30): Promise<CalendarResponse> {
+  return apiFetch(`/reports/calendar?days=${days}`);
+}
+
 export async function getReportSummary(
   period: ReportPeriod,
   referenceDate?: string,
