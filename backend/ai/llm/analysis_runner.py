@@ -61,6 +61,36 @@ def run_pose_analysis(
     return _compact(analysis, exercise_name, camera_view)
 
 
+def run_set_feedback(
+    normalized_pose: Dict[str, Any],
+    exercise_name: str,
+    camera_view: str = "측면",
+) -> str:
+    """set 경로 전체 그래프 실행 → coaching 텍스트 반환.
+
+    route_feedback 분기 조건:
+    - today_set_results 없음 → "daily" 아님
+    - historical_analysis_results / historical_feedback_texts 없음 → "long_term" 아님
+    → 자동으로 "set" 경로로 분기됨
+    """
+    rule_config_path = _resolve_rule_config(exercise_name)
+    if rule_config_path is None:
+        return ""
+
+    from ai.llm.langgraph_V1 import posefit_graph
+
+    state: Dict[str, Any] = {
+        "normalized_pose": normalized_pose,
+        "exercise": exercise_name,
+        "camera_view": camera_view,
+        "rule_config_path": rule_config_path,
+    }
+
+    result = posefit_graph.invoke(state)
+    feedback_text = result.get("final_feedback", {}).get("feedback_text", {})
+    return feedback_text.get("coaching") or feedback_text.get("summary") or ""
+
+
 def _compact(analysis: Dict[str, Any], exercise_name: str, camera_view: str) -> Dict[str, Any]:
     """장기 추세 평가에 필요한 핵심만 추려 저장(전체 result 는 수백 KB라 부적합)."""
     errors = [

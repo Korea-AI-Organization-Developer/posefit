@@ -1,3 +1,4 @@
+import asyncio
 import shutil
 import uuid
 from datetime import datetime
@@ -6,6 +7,8 @@ from pathlib import Path
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai.llm.langgraph_V2 import posefit_graph
+from ai.pose.mediapipe_estimatorV2 import vision
 from app.models.enums import SessionStatus
 from app.repositories.exercise import ExerciseRepository
 from app.repositories.feedback import FeedbackRepository
@@ -14,16 +17,9 @@ from app.schemas.feedback import FeedbackRead
 from app.schemas.workout import StopSessionResponse
 from app.schemas.workout_session import WorkoutSessionCreateRequest, WorkoutSessionRead
 
-# 포즈 추정 모델
-from ai.pose.mediapipe_estimatorV2 import vision
-
 UPLOAD_DIR = Path("uploads/workout_sessions")
 VIDEO_SAVE_BASE = Path("C:/posefit_saves")
 
-
-async def getLlmFeedback() -> str:
-    """LLM 코멘트 생성 (추후 구현 예정)."""
-    return "getLlmFeedback()"
 
 
 class WorkoutSessionService:
@@ -77,26 +73,54 @@ class WorkoutSessionService:
 
         video_url = f"/uploads/workout_sessions/{filename}"
         workout_point_model = vision
-        points = workout_point_model(
+        vision_result = workout_point_model(
                                         video_url = video_url,
                                         user_id = user_id,
                                         exercise_id= exercise_id,
                                         start_at=start_at,
                                         fps= 30  # fps변경 시 이곳을 참조
                                     )
+        points = vision_result["normalized"]
+        json_url = str(vision_result["norm_json_path"])
+
         session = await self.repo.create(
             user_id=user_id,
             exercise_id=exercise_id,
             started_at=start_at,
             ended_at=end_at,
             video_url=video_url,
+            json_url=json_url,
         )
         # 구조화 자세분석 결과 저장 (리포트 종합평가 long_term 입력). 실패해도 세션 저장엔 영향 없음.
         await self._save_pose_analysis(session.id, user_id, exercise_id, points)
 
         # 이 세트의 LLM 피드백을 만들어 feedbacks 에 저장한다(generatedBy='llm').
         # → 이후 GET /exercises/{id}/feedbacks 와 :summary 가 읽어가는 원본이 된다.
-        comment = await getLlmFeedback()
+        exercise = await self.exercise_repo.get_by_id(exercise_id)
+        exercise_name = exercise.name_ko if exercise else ""
+        if exercise_id == 1:
+            rule_config_path = "ai/llm/config/lunge_rule_config_mediapipe.json"
+        elif exercise_id == 2:
+            rule_config_path = "ai/llm/config/plank_rule_config_mediapipe.json"
+        elif exercise_id == 3:
+            rule_config_path = "ai/llm/config/pushup_rule_config_mediapipe.json"
+        elif exercise_id == 4:
+            rule_config_path = "ai/llm/config/oop_rule_config_mediapipe.json"
+        else:
+            rule_config_path = ""
+
+        # "set" 분기 강제:
+        # route_feedback은 today_set_results → "daily", historical_* → "long_term", 그 외 → "set" 순으로 분기한다.
+        # 아래 state에는 today_set_results / historical_analysis_results / historical_feedback_texts를
+        # 의도적으로 포함하지 않아 반드시 "set" 경로로만 진입한다.
+        state = {
+            "normalized_pose": points,
+            "exercise": exercise_name,
+            "camera_view": "측면",
+            "rule_config_path": rule_config_path,
+        }
+        result = await asyncio.to_thread(posefit_graph.invoke, state)
+        comment = result.get("final_feedback", {}).get("feedback_text", {}).get("coaching", "")
         feedback = await self.feedback_repo.create(session_id=session.id, content=comment)
         await self.db.commit()
         # created_at(서버 기본값)·확정 값을 채우기 위해 다시 읽어온다.
@@ -113,7 +137,6 @@ class WorkoutSessionService:
         self, session_id: int, user_id: int, exercise_id: int, normalized_pose
     ) -> None:
         """정규화 pose → 분석 노드 실행 → workout_analyses 저장. 어떤 실패든 무시."""
-        import asyncio
         import logging
 
         from app.models.workout import WorkoutAnalysis
