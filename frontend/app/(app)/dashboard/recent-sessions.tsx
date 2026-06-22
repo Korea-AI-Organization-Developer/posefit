@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { Badge, Card, CardBody, CardHeader } from "@/components/ui";
 import { formatScore, formatSessionTime } from "@/lib/format";
-import type { WorkoutSessionSummary } from "@/lib/mock/dashboard";
+import type { WorkoutSessionSummary } from "@/lib/api/dashboard";
 
 /* MAIN-02 — 최근 운동 기록. 행 클릭 시 해당 세션 리포트로 이동 */
 export function RecentSessions({

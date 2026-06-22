@@ -13,22 +13,16 @@ function formatDuration(sec: number): string {
   return `${m}분`;
 }
 
-// sessionsCount → 5단계 초록 농도 (workout_calendar.html 기준)
-const LEVEL_COLORS = [
-  "#EDEDEE", // 0 — 운동 없음
-  "#C8EDE4", // 1
-  "#8DD5C3", // 2
-  "#46BBA2", // 3
-  "#0D9B7B", // 4 — 가장 진함
-];
-
-function sessionLevel(count: number): number {
-  if (count <= 0) return 0;
-  if (count === 1) return 1;
-  if (count === 2) return 2;
-  if (count === 3) return 3;
-  return 4;
+// 소모 칼로리 → accent 알파(명도) 4단계. 대시보드 ActivityHeatmap 과 동일한 방식.
+// 구간은 workout_calendar.html 의 하위 경계(50/150)를 4단계에 맞춰 축약했다.
+function intensityClass(kcal: number): string {
+  if (kcal <= 0) return "bg-surface-muted";
+  if (kcal <= 50) return "bg-accent/25";
+  if (kcal <= 150) return "bg-accent/55";
+  return "bg-accent";
 }
+
+const LEGEND_CLASSES = ["bg-surface-muted", "bg-accent/25", "bg-accent/55", "bg-accent"];
 
 function CalendarGrid({ days }: { days: ReportOverview["calendar"]["days"] }) {
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -44,21 +38,19 @@ function CalendarGrid({ days }: { days: ReportOverview["calendar"]["days"] }) {
           <div key={`empty-${i}`} className="aspect-square" />
         ))}
         {days.map((day) => {
-          const level = sessionLevel(day.sessionsCount);
           const isToday = day.date === todayStr;
-          const tooltip = day.sessionsCount > 0
-            ? `${day.date} · ${day.sessionsCount}회${day.avgScore != null ? ` · 평균 ${day.avgScore}점` : ""}`
+          const tooltip = day.calories > 0
+            ? `${day.date} · ${day.calories}kcal · ${day.sessionsCount}회${day.avgScore != null ? ` · 평균 ${day.avgScore}점` : ""}`
             : day.date;
           return (
             <div
               key={day.date}
               title={tooltip}
               style={{
-                backgroundColor: LEVEL_COLORS[level],
                 outline: isToday ? "2px solid #1D9E75" : undefined,
                 outlineOffset: isToday ? "1px" : undefined,
               }}
-              className="aspect-square cursor-pointer rounded-md transition-transform hover:scale-110"
+              className={`aspect-square cursor-pointer rounded-md transition-transform hover:scale-110 ${intensityClass(day.calories)}`}
             />
           );
         })}
@@ -66,8 +58,8 @@ function CalendarGrid({ days }: { days: ReportOverview["calendar"]["days"] }) {
       {/* 범례 */}
       <div className="mt-3 flex items-center justify-end gap-1.5">
         <span className="text-xs text-text-muted">적음</span>
-        {LEVEL_COLORS.map((color) => (
-          <div key={color} className="size-3.5 rounded-sm" style={{ backgroundColor: color }} />
+        {LEGEND_CLASSES.map((cls) => (
+          <div key={cls} className={`size-3.5 rounded-sm ${cls}`} />
         ))}
         <span className="text-xs text-text-muted">많음</span>
       </div>
@@ -164,7 +156,19 @@ export function OverviewDialog() {
             {/* 종합 평가 */}
             {data.evaluation && (
               <section>
-                <h3 className="mb-3 text-sm font-semibold text-text-muted">종합 평가</h3>
+                <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-muted">
+                  종합 평가
+                  {data.evaluation.source === "ai" && (
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                      AI
+                    </span>
+                  )}
+                </h3>
+                {data.evaluation.summary && (
+                  <p className="mb-3 rounded-md bg-surface-muted px-4 py-3 text-sm leading-relaxed">
+                    {data.evaluation.summary}
+                  </p>
+                )}
                 {data.evaluation.messages.length === 0 ? (
                   <p className="text-sm text-text-muted">평가 데이터가 없어요.</p>
                 ) : (

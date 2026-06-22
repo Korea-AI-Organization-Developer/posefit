@@ -1,17 +1,18 @@
 import { Card, CardBody, CardHeader } from "@/components/ui";
 import { formatDay } from "@/lib/format";
-import type { CalendarDay } from "@/lib/mock/dashboard";
+import type { CalendarDay } from "@/lib/api/reports";
 
 const TOTAL_DAYS = 30;
 
 /* 주 시작은 월요일 — weeklySessionsCount 의 월~일(KST) 기준과 맞춘다 */
 const WEEKDAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
 
-/* 활동 강도 — accent 알파(명도) 차로만 구분한다 */
-function intensityClass(count: number): string {
-  if (count === 0) return "bg-surface-muted";
-  if (count === 1) return "bg-accent/25";
-  if (count === 2) return "bg-accent/55";
+/* 활동 강도 — 소모 칼로리(kcal) 기준, accent 알파(명도) 차로만 구분한다.
+ * 구간은 workout_calendar.html 의 하위 경계(50/150)를 4단계에 맞춰 축약했다. */
+function intensityClass(kcal: number): string {
+  if (kcal <= 0) return "bg-surface-muted";
+  if (kcal <= 50) return "bg-accent/25";
+  if (kcal <= 150) return "bg-accent/55";
   return "bg-accent";
 }
 
@@ -43,8 +44,9 @@ export function ActivityHeatmap({
   baseDate: string;
 }) {
   const countByDate = new Map(days.map((d) => [d.date, d.sessionsCount]));
+  const kcalByDate = new Map(days.map((d) => [d.date, d.calories]));
   const dates = lastNDates(baseDate, TOTAL_DAYS);
-  const activeDays = dates.filter((date) => (countByDate.get(date) ?? 0) > 0);
+  const activeDays = dates.filter((date) => (kcalByDate.get(date) ?? 0) > 0);
   const leadingBlanks = mondayIndex(dates[0]);
 
   return (
@@ -71,11 +73,15 @@ export function ActivityHeatmap({
             ))}
             {dates.map((date) => {
               const count = countByDate.get(date) ?? 0;
+              const kcal = kcalByDate.get(date) ?? 0;
+              const title = kcal > 0
+                ? `${formatDay(date)} · ${kcal}kcal · ${count}회`
+                : `${formatDay(date)} · ${count}회`;
               return (
                 <span
                   key={date}
-                  title={`${formatDay(date)} · ${count}회`}
-                  className={`aspect-square rounded-xs ${intensityClass(count)}`}
+                  title={title}
+                  className={`aspect-square rounded-xs ${intensityClass(kcal)}`}
                 />
               );
             })}

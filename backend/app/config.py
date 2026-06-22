@@ -16,8 +16,15 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 15  # openapi: access 15분
     refresh_token_expire_days: int = 14  # openapi: refresh 14일
 
+    # ─── LLM (Gemini) — 리포트 종합 평가 LangGraph 용 ───
+    # 키가 비어 있으면 종합 평가는 규칙 기반으로 폴백한다.
+    google_api_key: str = ""
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash"
+
     class Config:
         env_file = ".env"
+        extra = "ignore"  # .env 에 모델이 모르는 키가 있어도 무시(기동 실패 방지)
 
 
 settings = Settings()

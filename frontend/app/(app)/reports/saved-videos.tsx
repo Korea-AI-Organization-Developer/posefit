@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Play } from "lucide-react";
 import { Badge, Card, CardBody, CardHeader, Dialog } from "@/components/ui";
 import { formatDuration, formatScore, formatSessionTime } from "@/lib/format";
-import type { WorkoutSessionSummary } from "@/lib/mock/workout-sessions";
+import type { WorkoutSessionSummary } from "@/lib/api/dashboard";
 
 /* REP-01 — 저장한 영상 목록. 행 클릭 시 Dialog 로 재생(현재는 poster 플레이스홀더). */
 export function SavedVideos({

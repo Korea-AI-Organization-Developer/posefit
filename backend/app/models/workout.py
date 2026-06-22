@@ -55,6 +55,9 @@ class WorkoutSession(Base, TimestampMixin):
     video_url: Mapped[str | None] = mapped_column(
         String(500), nullable=True, comment="개인정보. saved=true일 때 오브젝트 스토리지 URL."
     )
+    json_url: Mapped[str | None] = mapped_column(
+        String(500), nullable=True, comment="포즈 추정 결과 JSON 파일 경로."
+    )
 
     user: Mapped["User"] = relationship(back_populates="sessions")
     exercise: Mapped["Exercise"] = relationship(back_populates="sessions")
@@ -99,6 +102,33 @@ class Feedback(Base):
     )
 
     session: Mapped["WorkoutSession"] = relationship(back_populates="feedbacks")
+
+
+class WorkoutAnalysis(Base):
+    """세션별 구조화 자세분석 결과(analysis_result) 누적 저장.
+
+    set 경로(norm2feature→feature2seg→pose_decide_node)의 출력을 그대로 보관하며,
+    리포트 종합평가(long_term)가 사용자·종목별로 누적 조회해 장기 추세를 평가한다.
+    """
+
+    __tablename__ = "workout_analyses"
+    __table_args__ = (
+        Index("idx_analysis_user_exercise", "user_id", "exercise_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("workout_sessions.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    exercise_id: Mapped[int] = mapped_column(ForeignKey("exercises.id"), nullable=False)
+    overall_status: Mapped[str | None] = mapped_column(
+        String(30), nullable=True, comment="correct | needs_correction | unknown"
+    )
+    analysis_result: Mapped[dict] = mapped_column(
+        JSON, nullable=False, comment="pose_decide_node 출력(errors·severity·occurrence_ratio 등)."
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        _UTCDateTime(fsp=6), nullable=False, server_default=text("CURRENT_TIMESTAMP(6)")
+    )
 
 
 class WorkoutDailyStat(Base):

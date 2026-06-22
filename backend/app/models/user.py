@@ -13,7 +13,6 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.mysql import VARBINARY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -47,9 +46,6 @@ class User(Base, TimestampMixin):
         back_populates="user", cascade="all, delete-orphan"
     )
     agreement: Mapped["Agreement"] = relationship(
-        back_populates="user", uselist=False, cascade="all, delete-orphan"
-    )
-    face_embedding: Mapped["FaceEmbedding"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
     sessions: Mapped[list["WorkoutSession"]] = relationship(back_populates="user")
@@ -113,20 +109,3 @@ class Agreement(Base):
     user: Mapped["User"] = relationship(back_populates="agreement")
 
 
-class FaceEmbedding(Base):
-    __tablename__ = "face_embeddings"
-
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
-    embedding: Mapped[bytes] = mapped_column(
-        VARBINARY(1024),
-        nullable=False,
-        comment="개인정보. dlib 128차원 float64 직렬화 (1024 bytes).",
-    )
-    model_version: Mapped[str] = mapped_column(
-        String(50), nullable=False, comment="임베딩 모델 버전. 동일 버전끼리만 비교 유효."
-    )
-    registered_at: Mapped[datetime] = mapped_column(
-        _UTCDateTime(fsp=6), nullable=False, server_default=text("CURRENT_TIMESTAMP(6)"), comment="등록날짜"
-    )
-
-    user: Mapped["User"] = relationship(back_populates="face_embedding")

@@ -1,8 +1,30 @@
 import { apiFetch } from "./server";
 import type { ReportPeriod, ReportSummary, ScoreTrendResponse } from "./types";
 
-export type { ReportPeriod, ReportSummary, ScoreTrendResponse } from "./types";
+export type {
+  ReportPeriod,
+  ReportSummary,
+  ScoreTrendResponse,
+  ScoreTrendSeries,
+  ScoreTrendPoint,
+} from "./types";
 export type TrendDays = 7 | 30 | 90;
+
+export interface CalendarDay {
+  date: string;
+  sessionsCount: number;
+  avgScore: number | null;
+  /** 해당 날짜 소모 칼로리(kcal) — 캘린더 색상 농도 기준 */
+  calories: number;
+}
+
+export interface CalendarResponse {
+  days: CalendarDay[];
+}
+
+export async function getCalendar(days = 30): Promise<CalendarResponse> {
+  return apiFetch(`/reports/calendar?days=${days}`);
+}
 
 export async function getReportSummary(
   period: ReportPeriod,

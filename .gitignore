@@ -45,3 +45,5 @@ backend/uploads/
 *.pickle
 *_2[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.json
 output.json
+
+*/*.webm

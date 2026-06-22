@@ -1,0 +1,166 @@
+{
+  "_comment": "threshold는 mediapipe_normalized/answer 정상 데이터와 mediapipe_normalized/wrong 오류 데이터의 window segment 분포 기반으로 재설정 (2026-06-21)",
+  "_calibration_source": {
+    "answer_dir": "mediapipe_normalized/answer",
+    "wrong_dir": "mediapipe_normalized/wrong",
+    "answer_files": 13,
+    "wrong_files": 10,
+    "answer_segments": 164,
+    "wrong_segments": 90,
+    "note": "wrong/plank_true_13.json은 폴더 위치가 잘못된 정상 데이터로 확인되어 정상군에 포함"
+  },
+  "_threshold_basis": {
+    "hip_drop_ratio": "answer max=0.055324, wrong p95=0.127196 -> threshold 0.07. 골반 처짐은 방향성 feature만 사용",
+    "hip_pike_ratio": "answer max=0.133963, wrong p95=0.402446 -> threshold 0.16. 골반 솟음은 방향성 feature만 사용",
+    "torso_horizontal_angle": "answer max=11.117995, wrong p95=89.028417 -> threshold 12.0",
+    "elbow_angle_upper": "answer max=87.492357, wrong p95=98.287253 -> threshold 90.0",
+    "body_line_angle_std": "answer max=1.943098, wrong p95=22.286032. Disabled because MediaPipe keypoint jitter can be misread as body shake.",
+    "body_line_angle_range": "answer max=6.507900, wrong p95=85.099892. Disabled because MediaPipe keypoint jitter can be misread as body shake.",
+    "head_drop_ratio": "answer max=0.029305, wrong p95=0.285950 -> threshold 0.04",
+    "head_rise_ratio": "answer max=0.101338, wrong p95=0.199406 -> threshold 0.12",
+    "ankle_angle": "answer max=19.662798, wrong p95=79.828043 -> threshold 22.0",
+    "shoulder_collapse_ratio": "answer range=0.429060~0.676700, wrong range=0.145743~0.955606 -> thresholds <0.40 or >0.70"
+  },
+
+  "plank": {
+    "side": {
+      "issues": [
+        {
+          "issue": "hip_sag",
+          "description": "골반 처짐",
+          "phase": "hold",
+          "condition_logic": "AND",
+          "conditions": [
+            { "feature": "hip_drop_ratio", "operator": ">", "threshold": 0.07 }
+          ],
+          "min_confidence": 0.7,
+          "_calibration_note": "body_line_angle은 방향성을 구분하지 못해 hip_sag/hip_pike 공통 조건에서 제거"
+        },
+        {
+          "issue": "hip_pike",
+          "description": "골반 솟음",
+          "phase": "hold",
+          "condition_logic": "AND",
+          "conditions": [
+            { "feature": "hip_pike_ratio", "operator": ">", "threshold": 0.16 }
+          ],
+          "min_confidence": 0.7,
+          "_calibration_note": "body_line_angle은 방향성을 구분하지 못해 hip_sag/hip_pike 공통 조건에서 제거"
+        },
+        {
+          "issue": "body_tilt",
+          "description": "몸통 기울어짐 (수평 미유지)",
+          "phase": "hold",
+          "condition_logic": "AND",
+          "conditions": [
+            { "feature": "torso_horizontal_angle", "operator": ">", "threshold": 12.0 }
+          ],
+          "min_confidence": 0.7
+        },
+        {
+          "issue": "head_drop",
+          "description": "목 떨어짐",
+          "phase": "hold",
+          "condition_logic": "AND",
+          "conditions": [
+            { "feature": "head_drop_ratio", "operator": ">", "threshold": 0.04 }
+          ],
+          "min_confidence": 0.7
+        },
+        {
+          "issue": "head_rise",
+          "description": "머리 치켜듦",
+          "phase": "hold",
+          "condition_logic": "AND",
+          "conditions": [
+            { "feature": "head_rise_ratio", "operator": ">", "threshold": 0.12 }
+          ],
+          "min_confidence": 0.7
+        },
+        {
+          "issue": "elbow_deviation",
+          "description": "팔꿈치 각도 이탈 (90° 기준)",
+          "phase": "hold",
+          "condition_logic": "AND",
+          "conditions": [
+            { "feature": "elbow_angle", "operator": ">", "threshold": 90.0 }
+          ],
+          "min_confidence": 0.4,
+          "_calibration_note": "plank_true_13 정상 데이터의 elbow_angle_min=42.452229 때문에 하한 조건은 제거하고 상한 조건만 사용"
+        },
+        {
+          "issue": "ankle_misalignment",
+          "description": "발목 정렬 불량",
+          "phase": "hold",
+          "condition_logic": "AND",
+          "conditions": [
+            { "feature": "ankle_angle", "operator": ">", "threshold": 22.0 }
+          ],
+          "min_confidence": 0.4,
+          "_calibration_note": "COCO-17에는 toe/foot keypoint가 없어 knee→ankle 라인의 수평 기울기를 proxy로 사용"
+        },
+        {
+          "issue": "shoulder_collapse",
+          "description": "어깨 무너짐 (견갑골 지지 실패)",
+          "phase": "hold",
+          "condition_logic": "OR",
+          "conditions": [
+            { "feature": "shoulder_collapse_ratio", "operator": "<", "threshold": 0.40 },
+            { "feature": "shoulder_collapse_ratio", "operator": ">", "threshold": 0.70 }
+          ],
+          "min_confidence": 0.4
+        }
+      ],
+
+      "feature_stats_reference": {
+        "_source": "mediapipe_normalized answer 13 files / 164 segments, wrong 10 files / 90 segments. wrong/plank_true_13.json included as answer.",
+        "hip_drop_ratio": {
+          "answer": { "min": 0.0, "p95": 0.019895, "p99": 0.051541, "max": 0.055324 },
+          "wrong": { "min": 0.0, "p95": 0.127196, "p99": 0.138604, "max": 0.150148 }
+        },
+        "hip_pike_ratio": {
+          "answer": { "min": 0.0, "p95": 0.117002, "p99": 0.129932, "max": 0.133963 },
+          "wrong": { "min": 0.0, "p95": 0.402446, "p99": 0.414918, "max": 0.424603 }
+        },
+        "body_line_angle_min": {
+          "answer": { "min": 147.609142, "p5": 151.382754, "p50": 164.373245, "p95": 178.392253, "max": 178.996682 },
+          "wrong": { "min": 10.873049, "p5": 15.761924, "p50": 150.548389, "p95": 175.306261, "max": 178.923136 },
+          "note": "directionless feature. Not used for hip_sag/hip_pike decisions."
+        },
+        "torso_horizontal_angle": {
+          "answer": { "min": 7.661392, "p95": 10.344485, "p99": 10.522419, "max": 11.117995 },
+          "wrong": { "min": 3.206686, "p95": 89.028417, "p99": 89.909001, "max": 89.989389 }
+        },
+        "elbow_angle": {
+          "answer": { "min": 42.452229, "p5": 50.157989, "p95_max": 81.043750, "max": 87.492357 },
+          "wrong": { "min": 48.036016, "p5": 52.589069, "p95_max": 98.287253, "max": 130.888407 }
+        },
+        "body_line_angle_std": {
+          "answer": { "min": 0.024745, "p95": 1.090693, "p99": 1.762130, "max": 1.943098 },
+          "wrong": { "min": 0.071128, "p95": 22.286032, "p99": 32.733928, "max": 35.187966 }
+        },
+        "body_line_angle_range": {
+          "answer": { "min": 0.080255, "p95": 3.505718, "p99": 5.589641, "max": 6.507900 },
+          "wrong": { "min": 0.231396, "p95": 85.099892, "p99": 88.637123, "max": 89.633712 }
+        },
+        "head_drop_ratio": {
+          "answer": { "min": 0.0, "p95": 0.012902, "p99": 0.027234, "max": 0.029305 },
+          "wrong": { "min": 0.0, "p95": 0.285950, "p99": 0.352829, "max": 0.357226 }
+        },
+        "head_rise_ratio": {
+          "answer": { "min": 0.0, "p95": 0.091820, "p99": 0.098147, "max": 0.101338 },
+          "wrong": { "min": 0.0, "p95": 0.199406, "p99": 0.288664, "max": 0.334314 }
+        },
+        "ankle_angle": {
+          "answer": { "min": 0.833809, "p95": 16.513006, "p99": 19.323527, "max": 19.662798 },
+          "wrong": { "min": 2.558504, "p95": 79.828043, "p99": 89.400294, "max": 89.767226 }
+        },
+        "shoulder_collapse_ratio": {
+          "answer": { "min": 0.429060, "p95_min": 0.623292, "p95_max": 0.632697, "max": 0.676700 },
+          "wrong": { "min": 0.145743, "p5_min": 0.171441, "p95_max": 0.870942, "max": 0.955606 },
+          "note": "normal range is bounded. Rule detects values below 0.40 or above 0.70."
+        }
+      }
+    }
+  }
+}

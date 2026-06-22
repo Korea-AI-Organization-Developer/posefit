@@ -20,6 +20,7 @@ class WorkoutSessionRepository:
         started_at: datetime,
         ended_at: datetime,
         video_url: str,
+        json_url: str | None = None,
     ) -> WorkoutSession:
         session = WorkoutSession(
             user_id=user_id,
@@ -28,6 +29,7 @@ class WorkoutSessionRepository:
             ended_at=ended_at,
             status=SessionStatus.completed,
             video_url=video_url,
+            json_url=json_url,
             saved=False,
         )
         self.db.add(session)

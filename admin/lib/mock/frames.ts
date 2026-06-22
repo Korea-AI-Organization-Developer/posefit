@@ -19,7 +19,6 @@ function frameKeypoints(frameIndex: number): number[][] {
 
 export interface FrameRecord {
   sessionId: number;
-  userId: number;
   exerciseId: number;
   exerciseNameKo: string;
   status: string;
@@ -37,7 +36,6 @@ export function generateFrames(
 ): FrameRecord[] {
   return Array.from({ length: count }, (_, i) => ({
     sessionId: session.id,
-    userId: session.userId,
     exerciseId: session.exercise.id,
     exerciseNameKo: session.exercise.nameKo,
     status: session.status,
@@ -62,7 +60,6 @@ export function toSessionJson(
     {
       session: {
         sessionId: session.id,
-        userId: session.userId,
         exerciseId: session.exercise.id,
         exerciseNameKo: session.exercise.nameKo,
         status: session.status,
