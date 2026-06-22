@@ -20,13 +20,6 @@ from app.schemas.feedback import ExerciseFeedbackSummaryResponse, FeedbackRead
 KST = timezone(timedelta(hours=9))
 
 
-# combine_feedbacks_llm: 여러 세트 피드백을 하나의 운동 종합 코멘트로 합친다.
-#   ⚠ 실제 RAG/LLM 연동은 추후 구현. 현재는 입력을 이어붙인 자리표시(placeholder) 문자열을 돌려준다.
-async def combine_feedbacks_llm(contents: list[str]) -> str:
-    joined = " / ".join(contents)
-    return f"[종합 피드백 자리표시] 총 {len(contents)}세트: {joined}"
-
-
 # _today_kst_range_utc: 지금 시각 기준 "오늘(KST)"의 [시작, 끝) 을 UTC naive datetime 으로 돌려준다.
 #   예) KST 2026-06-18 자정~다음날 자정 → UTC 2026-06-17 15:00 ~ 2026-06-18 15:00.
 #   DB 의 created_at 은 tz 정보 없는 UTC 이므로, 비교 대상도 tzinfo 를 떼어(naive UTC) 맞춘다.
@@ -59,7 +52,7 @@ class FeedbackService:
         rows = await self.repo.list_today(user.id, exercise_id, start_utc, end_utc)
         return [FeedbackRead.model_validate(row) for row in rows]
 
-    # summarize: 이번 묶음(session_ids)의 세트 피드백을 모아 LLM 으로 운동 종합 피드백 1건을 만든다.
+    # summarize: 이번 묶음(session_ids)의 세트 피드백을 LangGraph 일일(daily) 분기로 종합해 1건으로 만든다.
     #   - 종목이 없으면 None (라우터가 404).
     #   - session_ids 가 본인·해당 종목 소유가 아니면 자연히 걸러진다. 합칠 피드백이 하나도 없으면 422.
     #   - 결과는 저장하지 않고 반환만 한다(저장하려면 ERD 변경 필요).
@@ -76,11 +69,33 @@ class FeedbackService:
                 status_code=422, detail="합칠 세트 피드백이 없습니다."
             )
 
-        content = await combine_feedbacks_llm([row.content for row in rows])
+        # 선택된 세트 피드백을 LangGraph 일일 분기 입력(today_feedbacks)으로 변환한다.
+        #   langgraph_V1._normalize_feedback_item 이 읽는 키에 맞추고,
+        #   created_at 은 그래프 정렬 키이므로 ISO 문자열로 넘긴다.
+        today_feedbacks = [
+            {
+                "id": row.id,
+                "session_id": row.session_id,
+                "severity": row.severity.value,
+                "generated_by": row.generated_by.value,
+                "content": row.content,
+                "created_at": row.created_at.isoformat(),
+            }
+            for row in rows
+        ]
+
+        # 그래프는 무겁고 LLM 의존성이 있어 함수 안에서 지연 import (ai.face 패턴과 동일).
+        from ai.llm.langgraph_V1 import posefit_graph
+
+        state = await posefit_graph.ainvoke(
+            {"exercise": exercise.name_ko, "today_feedbacks": today_feedbacks}
+        )
+        final = state.get("final_feedback", {})
+
         return ExerciseFeedbackSummaryResponse(
             exercise_id=exercise_id,
             set_count=len(rows),
-            generated_by=FeedbackSource.llm,
-            content=content,
+            generated_by=final.get("generated_by", FeedbackSource.llm.value),
+            content=final.get("content", ""),
             created_at=datetime.now(timezone.utc),
         )
