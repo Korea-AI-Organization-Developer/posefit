@@ -283,10 +283,17 @@ class ReportService:
         if not feedback_texts and not analysis_results:
             return None
 
+        # 장기 추세 지표 — 코드가 deterministic 하게 계산(원칙 2: LLM 은 판단 안 함, 서술만).
+        daily_metrics = await self.repo.get_daily_metrics(
+            user_id, exercise_id, summary.period_start, summary.period_end
+        )
+        trend_metrics = self._compute_trend_metrics(analysis_results, daily_metrics)
+
         stats = {
             "sessions_count": summary.sessions_count,
             "avg_score": float(summary.avg_score) if summary.avg_score is not None else None,
             "best_exercise": summary.best_exercise.name_ko if summary.best_exercise else None,
+            "trend_metrics": trend_metrics,
         }
 
         from app.config import settings
@@ -332,6 +339,68 @@ class ReportService:
             return None
 
         return {"messages": messages, "summary": result.get("summary", "")}
+
+    @staticmethod
+    def _compute_trend_metrics(analysis_results: list[dict], daily_metrics: list) -> dict:
+        """장기 추세를 코드로 계산한다(원칙 2/3 준수 — 자세 판단 X, Rule 결과·수치 집계만).
+
+        - 자세 개선: analysis_result 의 오류 개수를 최근 절반 vs 과거 절반으로 비교.
+        - 수행시간 변화 / 점수 추세: workout_daily_stats 시계열을 최근 vs 과거로 비교.
+        """
+        metrics: dict = {}
+
+        def _half_avg(values: list[float]) -> float | None:
+            return round(sum(values) / len(values), 2) if values else None
+
+        # 1) 자세 개선 여부 — Rule Analyzer 가 낸 오류 개수의 시간 추세 (오래된→최신 순서로 정렬)
+        ordered = list(reversed(analysis_results))  # list_recent_results 는 최신순
+        if len(ordered) >= 2:
+            mid = len(ordered) // 2
+            earlier = [len(a.get("errors", [])) for a in ordered[:mid] if isinstance(a, dict)]
+            recent = [len(a.get("errors", [])) for a in ordered[mid:] if isinstance(a, dict)]
+            e_avg, r_avg = _half_avg(earlier), _half_avg(recent)
+            if e_avg is not None and r_avg is not None:
+                trend = "개선" if r_avg < e_avg - 0.5 else ("악화" if r_avg > e_avg + 0.5 else "정체")
+                metrics["posture_improvement"] = {
+                    "trend": trend,
+                    "earlier_errors_per_session": e_avg,
+                    "recent_errors_per_session": r_avg,
+                    "sessions_analyzed": len(ordered),
+                }
+
+        # 2) 수행시간 변화 / 3) 점수 추세 — 일자별 지표(오름차순)를 최근 vs 과거로 비교
+        if len(daily_metrics) >= 2:
+            mid = len(daily_metrics) // 2
+            earlier_rows, recent_rows = daily_metrics[:mid], daily_metrics[mid:]
+
+            def _avg_duration(rows) -> float | None:
+                sec = sum(int(r.total_duration_sec or 0) for r in rows)
+                cnt = sum(int(r.session_count or 0) for r in rows)
+                return round(sec / cnt, 1) if cnt else None
+
+            def _avg_score(rows) -> float | None:
+                vals = [float(r.avg_score) for r in rows if r.avg_score is not None]
+                return _half_avg(vals)
+
+            de, dr = _avg_duration(earlier_rows), _avg_duration(recent_rows)
+            if de is not None and dr is not None and de > 0:
+                d_trend = "증가" if dr > de * 1.1 else ("감소" if dr < de * 0.9 else "유지")
+                metrics["duration_change"] = {
+                    "trend": d_trend,
+                    "earlier_avg_sec": de,
+                    "recent_avg_sec": dr,
+                }
+
+            se, sr = _avg_score(earlier_rows), _avg_score(recent_rows)
+            if se is not None and sr is not None:
+                s_trend = "상승" if sr > se + 1 else ("하락" if sr < se - 1 else "정체")
+                metrics["score_trend"] = {
+                    "trend": s_trend,
+                    "earlier_avg": se,
+                    "recent_avg": sr,
+                }
+
+        return metrics
 
     @staticmethod
     def _run_long_term_graph(
