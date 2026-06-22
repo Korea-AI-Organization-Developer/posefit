@@ -1,3 +1,6 @@
+import asyncio
+import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -21,7 +24,24 @@ from app.routers import (
     workout_session,
 )
 
-app = FastAPI(title="PoseFit API")
+
+def _warmup_report_graph() -> None:
+    """리포트 종합평가 LangGraph(chromadb 포함)를 미리 import·컴파일해 둔다.
+    첫 종합평가 요청이 ~9초 import 비용을 물지 않도록 한다."""
+    try:
+        import ai.llm.langgraph_V1  # noqa: F401 — import 시점에 그래프 컴파일됨
+    except Exception as exc:  # noqa: BLE001 — 워밍업 실패는 무시(요청 시 lazy import 로 폴백)
+        logging.getLogger(__name__).warning("LangGraph 워밍업 실패(무시): %s", exc)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 서버 기동을 막지 않도록 백그라운드 스레드에서 그래프를 워밍업한다.
+    asyncio.create_task(asyncio.to_thread(_warmup_report_graph))
+    yield
+
+
+app = FastAPI(title="PoseFit API", lifespan=lifespan)
 
 _uploads_dir = Path("uploads")
 _uploads_dir.mkdir(exist_ok=True)
