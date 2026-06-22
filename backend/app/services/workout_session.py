@@ -1,4 +1,5 @@
 import asyncio
+import os
 import shutil
 import uuid
 from datetime import datetime
@@ -18,7 +19,9 @@ from app.schemas.workout import StopSessionResponse
 from app.schemas.workout_session import WorkoutSessionCreateRequest, WorkoutSessionRead
 
 UPLOAD_DIR = Path("uploads/workout_sessions")
-VIDEO_SAVE_BASE = Path("C:/posefit_saves")
+# 저장 영상 루트 — 컨테이너에서는 볼륨 마운트 경로(/app/saves)를 env 로 주입.
+# 미설정 시 로컬 개발용 기본값.
+VIDEO_SAVE_BASE = Path(os.getenv("VIDEO_SAVE_BASE", "saves"))
 
 
 
