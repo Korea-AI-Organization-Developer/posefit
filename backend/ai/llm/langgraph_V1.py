@@ -455,28 +455,27 @@ def daily_feedback_node(state: FeedbackState) -> dict:
     info_count = sum(
         1 for item in feedbacks if _normalize_severity(item.get("severity")) == "info"
     )
-    exercise = _clean_text(state.get("exercise")) or "today's exercise"
+    exercise = _clean_text(state.get("exercise")) or "오늘"
 
     issue_texts = _take_texts(feedbacks, {"warning", "critical"}, limit=3)
     positive_texts = _take_texts(feedbacks, {"info"}, limit=2)
 
     if feedback_count == 0:
-        summary = "No daily feedback messages were provided."
-        next_action = "Complete at least one set before requesting a daily summary."
+        summary = "오늘 받은 피드백이 없습니다."
+        next_action = "일일 요약을 받으려면 먼저 세트를 1개 이상 완료하세요."
     else:
-        summary = (
-            f"Reviewed {feedback_count} feedback message"
-            f"{'' if feedback_count == 1 else 's'} for {exercise} today."
-        )
+        summary = f"오늘 {exercise} 운동의 피드백 {feedback_count}건을 종합했습니다."
         if critical_count or warning_count:
-            next_action = "Start the next set by correcting the highest-priority issue above."
+            next_action = "위에서 가장 중요한 교정 포인트부터 잡고 다음 세트를 시작하세요."
         else:
-            next_action = "Keep the same form pattern in the next session."
+            next_action = "지금의 자세 패턴을 다음 세션에서도 그대로 유지하세요."
 
     return {
         "daily_feedback": {
             "summary": summary,
             "feedback_count": feedback_count,
+            # 현재 일일 종합은 규칙 기반 집계다(LLM 미호출). LLM 코칭을 붙이면 "llm" 으로 바꾼다.
+            "generated_by": "rule",
             "severity": _highest_severity(feedbacks),
             "severity_counts": {
                 "info": info_count,
@@ -505,22 +504,22 @@ def daily_text_summarize_node(state: FeedbackState) -> dict:
     summary = _clean_text(daily_feedback.get("summary"))
     main_issue = " ".join(issue_texts[:2])
     if not main_issue:
-        main_issue = "No major form issue was detected across today's feedback."
+        main_issue = "오늘 피드백에서 큰 자세 문제는 발견되지 않았습니다."
 
     if positive_texts:
         coaching = positive_texts[0]
     elif issue_texts:
-        coaching = "Use the issue above as the priority correction for the next set."
+        coaching = "위 문제를 다음 세트의 우선 교정 포인트로 삼으세요."
     elif feedbacks:
         coaching = feedbacks[0]["content"]
     else:
         coaching = ""
     if not coaching:
-        coaching = "No coaching message is available yet."
+        coaching = "아직 제공할 코칭 메시지가 없습니다."
 
     next_action = _clean_text(daily_feedback.get("next_action"))
     if not next_action:
-        next_action = "Review the most recent set feedback before the next workout."
+        next_action = "다음 운동 전에 가장 최근 세트 피드백을 확인하세요."
 
     return {
         "feedback_text": {
@@ -545,9 +544,13 @@ def daily_review_node(state: FeedbackState) -> dict:
         ]
     )
     severity = _normalize_severity(daily_feedback.get("severity"))
+    # 생성 주체는 daily_feedback_node 가 정한 값을 따른다(현재 규칙 기반 → "rule").
+    generated_by = _enum_or_text(daily_feedback.get("generated_by"), "rule").lower()
+    if generated_by not in {"rule", "llm"}:
+        generated_by = "rule"
     api_feedback = {
         "severity": severity,
-        "generatedBy": "llm",
+        "generatedBy": generated_by,
         "content": content,
     }
 
@@ -558,8 +561,8 @@ def daily_review_node(state: FeedbackState) -> dict:
             "feedback": api_feedback,
             "content": content,
             "severity": severity,
-            "generated_by": "llm",
-            "generatedBy": "llm",
+            "generated_by": generated_by,
+            "generatedBy": generated_by,
             "source_feedback_ids": daily_feedback.get("source_feedback_ids", []),
             "feedback_count": daily_feedback.get("feedback_count", 0),
         }
