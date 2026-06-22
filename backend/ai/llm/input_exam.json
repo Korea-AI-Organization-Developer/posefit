@@ -1,0 +1,38 @@
+{
+  "analysis_result": {
+    "exercise": "plank",
+    "camera_view": "side",
+    "overall_status": "needs_correction",
+    "errors": [
+      {
+        "error_code": "plank_hip_sag_side_v1",
+        "error_name": "골반 처짐",
+        "window_id": 3,
+        "severity": "medium",
+        "observed_values": {
+          "hip_sag_ratio_max": 0.12,
+          "torso_line_angle_min": 164.5
+        },
+        "threshold_values": {
+          "hip_sag_ratio_max": 0.08,
+          "torso_line_angle_min": 168.0
+        },
+        "time_range": {
+    "start_sec": 3.0,
+    "end_sec": 4.0
+  }
+      }
+    ],
+    "strengths": [
+      {
+        "name": "머리-상체 정렬",
+        "description": "머리와 상체 라인이 대부분 안정적으로 유지되었습니다.",
+        "window_ids": [
+          1,
+          2,
+          4
+        ]
+      }
+    ]
+  }
+}

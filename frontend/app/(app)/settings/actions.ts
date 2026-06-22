@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 
 import { getLatestAgreement, submitAgreements } from "@/lib/api/agreements";
 import { apiErrorMessage } from "@/lib/api/server";
+import { unlinkSocialAccount } from "@/lib/api/social-accounts";
 import { updateNickname, upsertDetail, withdraw } from "@/lib/api/users";
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "@/lib/auth/cookies";
 import type { ProfileFormValues } from "@/components/forms/profile-form";
@@ -48,6 +49,20 @@ export async function updateMarketingAction(
     });
   } catch (e) {
     return { error: apiErrorMessage(e, "동의 상태를 변경하지 못했어요.") };
+  }
+  revalidatePath("/settings");
+  return {};
+}
+
+/* SET-06 — 소셜 계정 해제 */
+export async function unlinkSocialAccountAction(
+  provider: string,
+  providerUid: string,
+): Promise<{ error?: string }> {
+  try {
+    await unlinkSocialAccount(provider, providerUid);
+  } catch (e) {
+    return { error: apiErrorMessage(e, "계정 해제에 실패했어요.") };
   }
   revalidatePath("/settings");
   return {};

@@ -1,3 +1,39 @@
+export interface WorkoutSessionRead {
+  id: number;
+  exerciseId: number;
+  status: string;
+  startedAt: string;
+  endedAt: string | null;
+  score: number | null;
+  repCount: number | null;
+  holdSec: number | null;
+  saved: boolean;
+  videoUrl: string | null;
+  createdAt: string;
+}
+
+export async function createSession(
+  exerciseId: number,
+): Promise<WorkoutSessionRead> {
+  const res = await fetch("/api/workout-sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      exerciseId,
+      startedAt: new Date().toISOString(),
+    }),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const detail =
+      body && typeof body === "object" && "detail" in body
+        ? String((body as { detail: unknown }).detail)
+        : `세션 생성 실패 (${res.status})`;
+    throw new Error(detail);
+  }
+  return body as WorkoutSessionRead;
+}
+
 export interface StopSessionApiResult {
   sessionId: number;
   videoUrl: string;

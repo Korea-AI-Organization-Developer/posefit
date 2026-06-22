@@ -81,7 +81,6 @@ export type SessionStatus = "in_progress" | "completed" | "aborted";
 
 export interface AdminSessionListItem {
   id: number;
-  userId: number;
   exercise: { id: number; nameKo: string };
   status: SessionStatus;
   startedAt: string;
@@ -105,6 +104,10 @@ export interface TimeseriesPoint {
   date: string;
   signups: number;
   sessions: number;
+}
+
+export interface StatsTimeseries {
+  points: TimeseriesPoint[];
 }
 
 export interface AuditLog {

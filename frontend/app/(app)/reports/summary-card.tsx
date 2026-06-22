@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { Badge, Card, CardBody, CardHeader } from "@/components/ui";
 import { formatDay, formatDuration, formatScore } from "@/lib/format";
-import type { ReportSummary } from "@/lib/mock/reports";
+import type { ReportSummary } from "@/lib/api/reports";
 
 interface Stat {
   label: string;

@@ -2,7 +2,7 @@ import { Pagination } from "@/components/pagination";
 import { Badge, Table, THead, TBody, TR, TH, TD } from "@/components/ui";
 import { auditActionLabel } from "@/lib/labels";
 import { formatDateTime } from "@/lib/format";
-import { listAuditLogs } from "@/lib/mock/admin-api";
+import { listAuditLogs } from "@/lib/api/admin-audit";
 
 export const metadata = { title: "감사 로그" };
 

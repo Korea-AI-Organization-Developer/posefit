@@ -56,3 +56,6 @@ class WorkoutSessionRepository:
     async def update_saved(self, session: WorkoutSession, video_url: str) -> None:
         session.video_url = video_url
         session.saved = True
+
+    async def delete(self, session: WorkoutSession) -> None:
+        await self.db.delete(session)

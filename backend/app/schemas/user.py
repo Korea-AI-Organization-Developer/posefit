@@ -74,7 +74,18 @@ class AgreementCreateRequest(CamelModel):
 # ─── Social ────────────────────────────────────────────────────────────────
 class SocialAccountRead(CamelModel):
     provider: str
+    provider_uid: str
     provider_email: str | None = None
     linked_at: datetime  # social_accounts.created_at
+
+
+# ─── Face ──────────────────────────────────────────────────────────────────
+class FaceDetectResponse(CamelModel):
+    detected: bool
+
+
+class FaceRegistrationResponse(CamelModel):
+    registered_at: datetime
+    model_version: str
 
 
