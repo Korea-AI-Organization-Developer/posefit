@@ -31,6 +31,28 @@ class ReportRepository:
         )
         return result.all()
 
+    async def get_calendar_durations(
+        self, user_id: int, start_date: date, end_date: date
+    ) -> list:
+        """캘린더 칼로리 계산용. 날짜·종목별 (stat_date, name_en, exercise_type, total_duration_sec) 반환."""
+        result = await self.db.execute(
+            select(
+                WorkoutDailyStat.stat_date,
+                Exercise.name_en,
+                Exercise.exercise_type,
+                func.sum(WorkoutDailyStat.total_duration_sec).label("total_duration_sec"),
+            )
+            .join(Exercise, Exercise.id == WorkoutDailyStat.exercise_id)
+            .where(
+                WorkoutDailyStat.user_id == user_id,
+                WorkoutDailyStat.stat_date >= start_date,
+                WorkoutDailyStat.stat_date <= end_date,
+            )
+            .group_by(WorkoutDailyStat.stat_date, Exercise.name_en, Exercise.exercise_type)
+            .order_by(WorkoutDailyStat.stat_date)
+        )
+        return result.all()
+
     async def get_summary(
         self,
         user_id: int,

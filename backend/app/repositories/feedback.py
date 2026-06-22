@@ -42,3 +42,24 @@ class FeedbackRepository:
         )
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
+
+    # list_recent_contents: 특정 사용자의 누적 피드백 본문(content)을 최신순으로 조회한다.
+    #   리포트 "종합 평가"에서 LangGraph long-term 평가의 입력으로 쓴다.
+    #   exercise_id 가 주어지면 해당 종목으로 한정한다(없으면 전체 종목).
+    async def list_recent_contents(
+        self,
+        user_id: int,
+        exercise_id: int | None = None,
+        limit: int = 60,
+    ) -> list[str]:
+        stmt = (
+            select(Feedback.content)
+            .join(WorkoutSession, Feedback.session_id == WorkoutSession.id)
+            .where(WorkoutSession.user_id == user_id)
+        )
+        if exercise_id is not None:
+            stmt = stmt.where(WorkoutSession.exercise_id == exercise_id)
+        stmt = stmt.order_by(Feedback.id.desc()).limit(limit)
+
+        result = await self.db.execute(stmt)
+        return [content for content in result.scalars().all() if content]

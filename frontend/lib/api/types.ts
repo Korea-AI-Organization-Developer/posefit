@@ -151,6 +151,8 @@ export interface CalendarDay {
   date: string; // date
   sessionsCount: number;
   avgScore: number | null;
+  /** 해당 날짜 소모 칼로리(kcal) — 캘린더 색상 농도 기준 */
+  calories: number;
 }
 
 export interface CalendarResponse {
@@ -178,10 +180,15 @@ export interface EvaluationMessage {
   text: string;
 }
 
+export type EvaluationSource = "ai" | "rule";
+
 export interface EvaluationResponse {
   period: ReportPeriod;
   exerciseId: number | null;
   messages: EvaluationMessage[];
+  /** AI 평가 시 LLM 이 작성한 2~3문장 종합 요약 (규칙 기반이면 빈 문자열) */
+  summary: string;
+  source: EvaluationSource;
 }
 
 export interface ReportOverview {

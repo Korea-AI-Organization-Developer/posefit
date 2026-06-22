@@ -10,6 +10,7 @@ class CalendarDay(CamelModel):
     date: date
     sessions_count: int
     avg_score: Decimal | None = None
+    calories: float = 0  # 해당 날짜 소모 칼로리(kcal). 캘린더 색상 농도의 기준.
 
 
 class CalendarResponse(CamelModel):
@@ -72,10 +73,18 @@ class EvaluationMessage(CamelModel):
     text: str
 
 
+class EvaluationSource(str, Enum):
+    ai = "ai"      # LangGraph LLM 기반 종합 평가
+    rule = "rule"  # 규칙 기반 폴백
+
+
 class EvaluationResponse(CamelModel):
     period: ReportPeriod
     exercise_id: int | None = None
     messages: list[EvaluationMessage]
+    # summary: AI 평가 시 LLM 이 작성한 2~3문장 종합 요약(규칙 기반이면 빈 문자열).
+    summary: str = ""
+    source: EvaluationSource = EvaluationSource.rule
 
 
 # ─── Overview (팝업) ───
