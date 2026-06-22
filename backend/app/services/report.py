@@ -289,17 +289,10 @@ class ReportService:
             return None
 
         try:
-            # langgraph/langchain 은 무거운 선택적 의존성 → lazy import.
-            from ai.llm.report_long_term import run_long_term_evaluation
-
+            # langgraph_V1 의 통합 그래프(long_term 분기)를 호출한다.
+            # chromadb 등 무거운 의존성을 끌어오므로 lazy import + to_thread(동기 그래프).
             result = await asyncio.wait_for(
-                asyncio.to_thread(
-                    run_long_term_evaluation,
-                    feedback_texts,
-                    stats,
-                    api_key,
-                    settings.gemini_model,
-                ),
+                asyncio.to_thread(self._run_long_term_graph, feedback_texts, stats, api_key, settings.gemini_model),
                 timeout=_AI_EVALUATION_TIMEOUT_SEC,
             )
         except Exception as exc:  # noqa: BLE001 — 어떤 실패든 규칙 기반으로 폴백
@@ -325,6 +318,25 @@ class ReportService:
             return None
 
         return {"messages": messages, "summary": result.get("summary", "")}
+
+    @staticmethod
+    def _run_long_term_graph(
+        feedback_texts: list[str], stats: dict, api_key: str, model: str
+    ) -> dict | None:
+        """langgraph_V1 통합 그래프를 long_term 분기로 실행(동기). final_feedback 반환."""
+        from ai.llm.langgraph_V1 import posefit_graph
+
+        result = posefit_graph.invoke({
+            "historical_feedback_texts": feedback_texts,
+            "report_stats": stats,
+            "api_key": api_key,
+            "model": model,
+        })
+        final = result.get("final_feedback") or {}
+        messages = final.get("messages") or []
+        if not messages:
+            return None
+        return {"messages": messages, "summary": final.get("summary", "")}
 
     async def get_overview(self, user_id: int, user_created_at: date) -> ReportOverview:
         """누적 요약 + 최근 30일 캘린더 + 최근 90일 점수 추이 + 종합 평가를 병렬로 조합."""
