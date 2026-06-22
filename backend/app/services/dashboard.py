@@ -9,12 +9,12 @@ class DashboardService:
         self.repo = DashboardRepository(db)
 
     async def get_dashboard(self, user_id: int) -> DashboardResponse:
-        recent_score, weekly_count, lifetime_count, sessions = await _gather(
-            self.repo.get_recent_score(user_id),
-            self.repo.get_weekly_sessions_count(user_id),
-            self.repo.get_lifetime_sessions_count(user_id),
-            self.repo.get_recent_sessions(user_id),
-        )
+        # 같은 AsyncSession 에서는 동시 실행(asyncio.gather)이 불가하므로 순차 조회한다.
+        # (단일 세션=단일 커넥션이라 DB 단에서 어차피 직렬화되므로 성능 손해도 없다)
+        recent_score = await self.repo.get_recent_score(user_id)
+        weekly_count = await self.repo.get_weekly_sessions_count(user_id)
+        lifetime_count = await self.repo.get_lifetime_sessions_count(user_id)
+        sessions = await self.repo.get_recent_sessions(user_id)
 
         recent_sessions = [
             RecentSession(
@@ -39,8 +39,3 @@ class DashboardService:
             lifetime_sessions_count=lifetime_count,
             recent_sessions=recent_sessions,
         )
-
-
-async def _gather(*coros):
-    import asyncio
-    return await asyncio.gather(*coros)
