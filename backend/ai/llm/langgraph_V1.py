@@ -2047,16 +2047,48 @@ def set_text_summarize_node(state:FeedbackState) -> dict:
 # 출력: final_feedback
 # 역할: 최종 화면 출력용 피드백 구성
 # =========================================================
-def set_review_node(state:FeedbackState) -> dict:
+def set_review_node(state: FeedbackState) -> dict:
     print("출력 텍스트 리뷰 노드")
+
+    validation_errors: List[str] = []
     set_feedback = state.get("set_feedback") or {}
+    feedback_text = state.get("feedback_text") or {}
+    exercise = str(state.get("exercise") or "")
+
+    # set_feedback 필수 필드 검증
+    SET_FEEDBACK_REQUIRED = {"summary", "coaching", "timeline", "source_error_codes", "generation_stage"}
+    missing_sf = SET_FEEDBACK_REQUIRED - set_feedback.keys()
+    if missing_sf:
+        validation_errors.append(f"set_feedback 누락 필드: {sorted(missing_sf)}")
+
+    # feedback_text 필수 필드 검증
+    FEEDBACK_TEXT_REQUIRED = {"summary", "main_issue", "coaching", "next_action", "timeline_feedback"}
+    missing_ft = FEEDBACK_TEXT_REQUIRED - feedback_text.keys()
+    if missing_ft:
+        validation_errors.append(f"feedback_text 누락 필드: {sorted(missing_ft)}")
+
+    # source_error_codes가 현재 exercise와 일치하는지 검증
+    exercise_prefix = _exercise_rule_key(exercise)
+    source_error_codes = set_feedback.get("source_error_codes") or []
+    if exercise_prefix and source_error_codes:
+        wrong_codes = [
+            code for code in source_error_codes
+            if not str(code).startswith(exercise_prefix)
+        ]
+        if wrong_codes:
+            validation_errors.append(
+                f"운동 불일치: exercise='{exercise}'이지만 "
+                f"다른 운동의 error_code 포함: {wrong_codes}"
+            )
+
     return {
         "final_feedback": {
             "type": "set",
-            "feedback_text": state.get("feedback_text", {}),
+            "feedback_text": feedback_text,
             "timeline": set_feedback.get("timeline", []),
-            "source_error_codes": set_feedback.get("source_error_codes", []),
-        }
+            "source_error_codes": source_error_codes,
+        },
+        "errors": validation_errors,
     }
 
 # --------------------------------------------------------------------
