@@ -1067,11 +1067,16 @@ paths:
     post:
       tags: [Sessions]
       operationId: stopWorkoutSession
-      summary: STOP — 운동 영상 일괄 업로드 + LLM 코멘트 반환 (Q-W4)
+      summary: STOP — 세트 1회 영상 업로드 + LLM 세트 피드백 반환 (Q-W4)
       description: |
-        운동 종료 시 녹화된 운동 영상 전체를 한 번에 멀티파트로 업로드한다.
-        서버가 영상에서 포즈를 추론·채점하고 RAG/LLM 코칭 코멘트를 생성해 반환한다.
+        **세트(set) 1회**의 녹화 영상을 멀티파트로 업로드한다. 한 번의 STOP = 한 세트.
+        서버가 영상에서 포즈를 추론·채점하고 RAG/LLM 으로 **그 세트의 피드백 1건**을
+        생성해 feedbacks(generatedBy='llm')에 저장하고, 저장된 feedback 을 반환한다.
         세션 status=in_progress 가 아니면 409 SESSION_NOT_IN_PROGRESS.
+
+        한 운동을 여러 세트 하려면 세트마다 `POST /workout-sessions`(세션=세트 생성) →
+        `:stop` 을 반복한다. 한 묶음(이번 운동)의 세트 세션 id 들은 프런트가 들고 있다가,
+        운동을 마칠 때 `POST /exercises/{id}/feedbacks:summary` 로 넘겨 종합 피드백을 받는다.
 
         # (향후 발전, 주석 처리) 실시간 바이트(키포인트) 트래킹 + 얼굴 인식 매칭
         # 시나리오는 :start / /frames endpoint 로 복구 가능. 현재는 영상 일괄 업로드만 사용.
@@ -1085,25 +1090,21 @@ paths:
               $ref: '#/components/schemas/StopSessionForm'
       responses:
         '200':
-          description: 완료 — 세션 결과 + LLM 코멘트 반환
+          description: 완료 — 세트 결과(세션) + 그 세트의 LLM 피드백 반환
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/StopSessionResponse'
               example:
-                session:
-                  id: 50220
-                  exercise: { id: 1, nameKo: "스쿼트" }
-                  status: "completed"
-                  startedAt: "2026-05-26T09:45:00Z"
-                  endedAt: "2026-05-26T09:47:14Z"
-                  durationSec: 134
-                  score: 87.5
-                  repCount: 8
-                  holdSec: null
-                  saved: false
-                  videoUrl: null
-                comment: "스쿼트 8회 중 6회는 자세가 매우 안정적이었습니다. 다만 3회차에서 무릎이 발끝보다 앞으로 나왔으니, 무게중심을 뒤꿈치 쪽으로 두면 더 좋아집니다."
+                sessionId: 50220
+                videoUrl: "/uploads/workout_sessions/3f9c1b2a.mp4"
+                score: 87.5
+                feedback:
+                  id: 9001
+                  severity: "warning"
+                  generatedBy: "llm"
+                  content: "스쿼트 8회 중 6회는 자세가 매우 안정적이었습니다. 다만 3회차에서 무릎이 발끝보다 앞으로 나왔으니, 무게중심을 뒤꿈치 쪽으로 두면 더 좋아집니다."
+                  createdAt: "2026-05-26T09:47:14Z"
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1241,16 +1242,28 @@ paths:
   #         $ref: '#/components/responses/UnprocessableEntity'
   # ===========================================================================
   # Feedbacks — SCR-09
+  #
+  # 피드백은 두 층위로 나뉜다.
+  #   1) 세트 피드백   : STOP(:stop) 1회당 1건. feedbacks 테이블에 저장(generatedBy='llm').
+  #                      → 운동 페이지 하단에 세트 1·2·3… 으로 누적 표시.
+  #   2) 종합 피드백   : 운동을 마칠 때 이번 묶음의 세트 피드백을 LLM 이 합쳐 1건으로 요약.
+  #                      → :summary 가 즉석에서 생성해 "반환만" 한다(미저장).
+  #
+  # "이번 운동 묶음(bout)"은 별도 저장 식별자 없이 프런트가 들고 있는 세트 세션 id 목록으로
+  # 구분한다(저장 식별자를 두면 ERD 변경이 필요하므로 두지 않음). 따라서 묶음 단위 작업은
+  # exerciseId 만으로는 표현할 수 없어 sessionIds 를 본문으로 받는다.
   # ===========================================================================
   /exercises/{id}/feedbacks:
     get:
       tags: [Feedbacks]
       operationId: listExerciseFeedbacks
-      summary: 종목별 당일 피드백 조회 (Q-R10 일부) — 오늘(KST), id ASC
+      summary: 종목별 당일 세트 피드백 조회 (Q-R10 일부) — 오늘(KST), id ASC
       description: |
-        지정한 운동 종목(exerciseId)에 대한 **당일(오늘, KST)** 세션 피드백만 조회한다.
-        운동 중 날짜가 바뀌는 경우는 고려하지 않으며, 조회는 "오늘" 조건만 적용한다.
-        정렬은 id ASC.
+        지정한 운동 종목(exerciseId)에 대한 **당일(오늘, KST)** 세트 피드백을 조회한다(이력/표시용).
+        운동 중 날짜가 바뀌는 경우는 고려하지 않으며, 조회는 "오늘" 조건만 적용한다. 정렬은 id ASC.
+
+        참고: 이 GET 은 exerciseId 만으로 조회하므로 "오늘 전체"를 돌려준다. 진행 중인
+        **이번 묶음(bout)만** 합치는 종합 피드백은 아래 `:summary`(sessionIds 본문)를 사용한다.
       parameters:
         - $ref: '#/components/parameters/ExerciseId'
       responses:
@@ -1277,6 +1290,50 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /exercises/{id}/feedbacks:summary:
+    post:
+      tags: [Feedbacks]
+      operationId: summarizeExerciseFeedbacks
+      summary: 운동 종합 피드백 생성 — 이번 묶음 세트 피드백을 LLM 으로 합쳐 1건 반환(미저장)
+      description: |
+        사용자가 한 운동을 마칠 때 호출한다. 본문으로 이번 운동 묶음(bout)의 **세트 세션 id 목록**
+        (sessionIds)을 받아, 그 세션들의 세트 피드백을 모아 RAG/LLM 으로 **종합 피드백 1건**을 만든다.
+
+        - 묶음 범위는 sessionIds 로만 정해진다(현재 묶음만 — "오늘 전체"가 아님).
+        - 각 세션은 요청 사용자 소유이고 path 의 exerciseId 와 일치해야 한다. 아니면 검증 실패.
+        - 결과는 **저장하지 않고 반환만** 한다. (저장하려면 feedbacks 에 종합/세트 구분 컬럼 등
+          ERD 변경이 필요하므로 의도적으로 미저장.)
+      parameters:
+        - $ref: '#/components/parameters/ExerciseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExerciseFeedbackSummaryRequest'
+            example:
+              sessionIds: [50220, 50221, 50222]
+      responses:
+        '200':
+          description: OK — 종합 피드백 1건(미저장)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExerciseFeedbackSummaryResponse'
+              example:
+                exerciseId: 1
+                setCount: 3
+                generatedBy: "llm"
+                content: "총 3세트를 진행했습니다. 전반적으로 깊이는 안정적이었고 세트가 진행될수록 무릎 정렬이 좋아졌습니다. 다만 후반 세트에서 허리가 말리는 경향이 있으니, 다음에는 코어를 단단히 고정한 채 천천히 앉아보세요."
+                createdAt: "2026-06-17T10:05:31Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
   # ===========================================================================
   # Reports — SCR-05(캘린더), SCR-10
   # ===========================================================================
@@ -2716,14 +2773,25 @@ components:
 
     StopSessionResponse:
       type: object
-      description: STOP 처리 결과 — 세션 + RAG/LLM 코칭 comment.
-      required: [session, comment]
+      description: |
+        STOP(=세트 1회) 처리 결과. sessionId/videoUrl 은 프런트가 이번 묶음(bout)의 세션 추적·
+        영상 저장에 쓰고, feedback 은 그 세트의 저장된 RAG/LLM 피드백(generatedBy='llm')이다.
+        프런트는 이 feedback 들을 모아 운동 페이지 하단에 세트 1·2·3… 으로 쌓아 보여준다.
+      required: [sessionId, videoUrl, feedback]
       properties:
-        session:
-          $ref: '#/components/schemas/WorkoutSession'
-        comment:
+        sessionId:
+          type: integer
+          format: int64
+          description: 생성된 세트 세션 id. 이번 묶음의 :summary 호출 시 sessionIds 에 모은다.
+        videoUrl:
           type: string
-          description: 업로드된 운동 영상 분석으로 RAG/LLM 이 생성한 종합 코칭 코멘트.
+          description: 서버에 저장된 이 세트 영상의 경로(URL).
+        score:
+          type: number
+          nullable: true
+          description: 0~100점. 채점 전이면 null.
+        feedback:
+          $ref: '#/components/schemas/Feedback'
 
     SaveSessionForm:
       type: object
@@ -2883,7 +2951,9 @@ components:
     # ---- Feedback ---------------------------------------------------------
     Feedback:
       type: object
-      description: erd.sql feedbacks 와 1:1. 표시 순서는 id ASC.
+      description: |
+        erd.sql feedbacks 와 1:1. 한 행 = 세트(set) 1회의 피드백. 표시 순서는 id ASC.
+        (운동 종합 피드백은 저장하지 않으며 ExerciseFeedbackSummaryResponse 로만 반환된다.)
       required: [id, severity, generatedBy, content, createdAt]
       properties:
         id:
@@ -2901,6 +2971,46 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    # ---- ExerciseFeedbackSummary (운동 종합 피드백, 미저장) -----------------
+    ExerciseFeedbackSummaryRequest:
+      type: object
+      description: |
+        운동을 마칠 때 종합 피드백을 만들 대상 — 이번 묶음(bout)의 세트 세션 id 목록.
+        각 세션은 요청 사용자 소유이며 path 의 exerciseId 와 일치해야 한다.
+      required: [sessionIds]
+      properties:
+        sessionIds:
+          type: array
+          description: 이번 운동에서 진행한 세트 세션 id 들(= 각 STOP 대상 세션). 최소 1개.
+          minItems: 1
+          items:
+            type: integer
+            format: int64
+    ExerciseFeedbackSummaryResponse:
+      type: object
+      description: |
+        이번 묶음 세트 피드백을 LLM 이 합쳐 만든 운동 종합 피드백 1건. **저장하지 않음**
+        (DB 미반영이라 id 가 없다 — 저장하려면 ERD 변경 필요).
+      required: [exerciseId, setCount, generatedBy, content, createdAt]
+      properties:
+        exerciseId:
+          type: integer
+          format: int64
+        setCount:
+          type: integer
+          description: 종합에 사용된 세트(피드백) 개수.
+        generatedBy:
+          type: string
+          enum: [llm]
+          description: 종합 피드백은 항상 LLM 생성.
+        content:
+          type: string
+          description: 여러 세트 피드백을 종합한 운동 전체 코칭 코멘트.
+        createdAt:
+          type: string
+          format: date-time
+          description: 생성 시각(서버 응답 시점). 저장하지 않으므로 표시용.
 
     # ---- Reports ----------------------------------------------------------
     CalendarDay:

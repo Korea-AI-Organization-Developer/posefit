@@ -8,8 +8,12 @@ from app.database import get_db
 from app.dependencies import get_current_user
 # User: 로그인 사용자 모델.
 from app.models.user import User
-# FeedbackRead: 응답 형식. FeedbackService: 실제 로직 층.
-from app.schemas.feedback import FeedbackRead
+# FeedbackRead: 세트 피드백 응답 형식. 종합 요청/응답 스키마도 함께 가져온다.
+from app.schemas.feedback import (
+    ExerciseFeedbackSummaryRequest,
+    ExerciseFeedbackSummaryResponse,
+    FeedbackRead,
+)
 from app.services.feedback import FeedbackService
 
 # exercise 라우터와 같은 prefix("/exercises")를 쓰되, 문서 분류는 Feedbacks 태그로 둔다.
@@ -25,6 +29,21 @@ async def list_exercise_feedbacks(
     db: AsyncSession = Depends(get_db),
 ):
     result = await FeedbackService(db).list_today(user, exercise_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="운동 종목을 찾을 수 없습니다.")
+    return result
+
+
+# POST /exercises/{exercise_id}/feedbacks:summary — 운동 종합 피드백 생성(미저장).
+#   본문 sessionIds(이번 묶음 세트 세션) 의 피드백을 모아 LLM 으로 1건으로 합쳐 반환한다.
+@router.post("/{exercise_id}/feedbacks:summary", response_model=ExerciseFeedbackSummaryResponse)
+async def summarize_exercise_feedbacks(
+    exercise_id: int,
+    body: ExerciseFeedbackSummaryRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await FeedbackService(db).summarize(user, exercise_id, body.session_ids)
     if result is None:
         raise HTTPException(status_code=404, detail="운동 종목을 찾을 수 없습니다.")
     return result

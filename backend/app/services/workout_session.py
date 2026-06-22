@@ -8,7 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enums import SessionStatus
 from app.repositories.exercise import ExerciseRepository
+from app.repositories.feedback import FeedbackRepository
 from app.repositories.workout_session import WorkoutSessionRepository
+from app.schemas.feedback import FeedbackRead
 from app.schemas.workout import StopSessionResponse
 from app.schemas.workout_session import WorkoutSessionCreateRequest, WorkoutSessionRead
 
@@ -28,6 +30,7 @@ class WorkoutSessionService:
     def __init__(self, db: AsyncSession):
         self.repo = WorkoutSessionRepository(db)
         self.exercise_repo = ExerciseRepository(db)
+        self.feedback_repo = FeedbackRepository(db)
         self.db = db
 
     async def create(self, user_id: int, req: WorkoutSessionCreateRequest) -> WorkoutSessionRead:
@@ -88,10 +91,21 @@ class WorkoutSessionService:
             ended_at=end_at,
             video_url=video_url,
         )
-        await self.db.commit()
-        # comment = await getLlmFeedback(피드백 위치 , points)
+
+        # 이 세트의 LLM 피드백을 만들어 feedbacks 에 저장한다(generatedBy='llm').
+        # → 이후 GET /exercises/{id}/feedbacks 와 :summary 가 읽어가는 원본이 된다.
         comment = await getLlmFeedback()
-        return StopSessionResponse(session_id=session.id, video_url=video_url, comment=comment)
+        feedback = await self.feedback_repo.create(session_id=session.id, content=comment)
+        await self.db.commit()
+        # created_at(서버 기본값)·확정 값을 채우기 위해 다시 읽어온다.
+        await self.db.refresh(feedback)
+
+        return StopSessionResponse(
+            session_id=session.id,
+            video_url=video_url,
+            score=float(session.score) if session.score is not None else None,
+            feedback=FeedbackRead.model_validate(feedback),
+        )
 
     async def save_video(self, session_id: int, user_id: int) -> None:
         session = await self.repo.get_by_id(session_id)

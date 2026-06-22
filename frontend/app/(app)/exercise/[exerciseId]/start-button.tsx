@@ -5,17 +5,18 @@ import { useTransition } from "react";
 import { Play } from "lucide-react";
 
 import { Button } from "@/components/ui";
-import { createSession } from "@/lib/api/workout-session";
 
-/* SCR-07 "운동 시작하기" — createSession(POST /workout-sessions) 후 실행 화면으로 */
+/*
+ * SCR-07 "운동 시작하기" — 실행 화면으로 이동.
+ * 세션은 미리 만들지 않는다. 각 세트의 STOP(:stop)이 그때 세션을 생성·채점한다.
+ */
 export function StartButton({ exerciseId }: { exerciseId: number }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
   function go() {
-    startTransition(async () => {
-      const session = await createSession(exerciseId);
-      router.push(`/exercise/${exerciseId}/session?s=${session.id}`);
+    startTransition(() => {
+      router.push(`/exercise/${exerciseId}/session`);
     });
   }
 
