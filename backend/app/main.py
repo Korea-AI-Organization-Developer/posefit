@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -46,9 +47,16 @@ _uploads_dir = Path("uploads")
 _uploads_dir.mkdir(exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
+# 허용 origin — 콤마 구분 env(CORS_ORIGINS)에서 읽고, 미설정 시 로컬 개발 기본값.
+# 현 플로우는 브라우저가 Next BFF 만 호출하므로 영향이 적지만, 공개 origin 대비 env 화.
+_cors_origins = [
+    o.strip()
+    for o in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
