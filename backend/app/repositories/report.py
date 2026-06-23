@@ -4,7 +4,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.exercise import Exercise
-from app.models.workout import WorkoutDailyStat
+from app.models.enums import SessionStatus
+from app.models.workout import WorkoutDailyStat, WorkoutSession
 
 
 class ReportRepository:
@@ -14,20 +15,22 @@ class ReportRepository:
     async def get_calendar(
         self, user_id: int, start_date: date, end_date: date
     ) -> list:
-        """start_date ~ end_date 범위의 (stat_date, sessions_count, avg_score) 반환."""
+        """start_date ~ end_date 범위의 (stat_date, sessions_count, avg_score) 반환.
+        workout_daily_stats 대신 workout_sessions 를 직접 집계한다."""
         result = await self.db.execute(
             select(
-                WorkoutDailyStat.stat_date,
-                func.sum(WorkoutDailyStat.session_count).label("sessions_count"),
-                func.avg(WorkoutDailyStat.avg_score).label("avg_score"),
+                func.date(WorkoutSession.started_at).label("stat_date"),
+                func.count(WorkoutSession.id).label("sessions_count"),
+                func.avg(WorkoutSession.score).label("avg_score"),
             )
             .where(
-                WorkoutDailyStat.user_id == user_id,
-                WorkoutDailyStat.stat_date >= start_date,
-                WorkoutDailyStat.stat_date <= end_date,
+                WorkoutSession.user_id == user_id,
+                WorkoutSession.status == SessionStatus.completed,
+                func.date(WorkoutSession.started_at) >= start_date,
+                func.date(WorkoutSession.started_at) <= end_date,
             )
-            .group_by(WorkoutDailyStat.stat_date)
-            .order_by(WorkoutDailyStat.stat_date)
+            .group_by(func.date(WorkoutSession.started_at))
+            .order_by(func.date(WorkoutSession.started_at))
         )
         return result.all()
 
