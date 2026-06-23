@@ -119,7 +119,7 @@ class WorkoutSessionService:
                                         user_id = user_id,
                                         exercise_id= exercise_id,
                                         start_at=start_at,
-                                        fps= 30  # fps변경 시 이곳을 참조
+                                        fps= None  # None = 원본 fps 그대로 전체 프레임 처리
                                     )
         points = vision_result["normalized"]
         json_url = str(vision_result["norm_json_path"])
@@ -161,8 +161,12 @@ class WorkoutSessionService:
             "rule_config_path": rule_config_path,
             "exercise_id": exercise_id,
         }
-        result = await asyncio.to_thread(posefit_graph.invoke, state)
+        result: dict = dict(await asyncio.to_thread(posefit_graph.invoke, state))
         final_fb = result.get("final_feedback", {})
+
+        score_pct = result.get("analysis_result", {}).get("score_summary", {}).get("time_weighted_score_pct")
+        if score_pct is not None:
+            session.score = score_pct
 
         # coaching 텍스트만 DB에 저장 (summary·timeline은 응답 전용)
         # "set" 분기: final_feedback = {raw, summary, timestamp} — "feedback_text.coaching" 구조 아님

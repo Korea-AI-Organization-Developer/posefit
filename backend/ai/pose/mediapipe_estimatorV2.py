@@ -351,10 +351,16 @@ class MediaPipePoseEstimator:
         vid_out_path   = video_out_dir / "annotated.mp4" if self.save_video else None
 
         cap         = cv2.VideoCapture(str(self.video_path))
-        src_fps     = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        src_fps_raw = cap.get(cv2.CAP_PROP_FPS) or 30.0
         width       = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height      = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total       = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        # 브라우저 WebRTC(WebM)는 1ms 타임베이스로 OpenCV가 fps=1000으로 잘못 읽음
+        # cap.set() 후 CAP_PROP_POS_MSEC 가 WebM에서 0을 반환해 시킹 방식은 사용 불가
+        # → 30fps 로 하드코딩 보정, 타임스탬프는 루프에서 CAP_PROP_POS_MSEC 직접 읽음
+        src_fps     = 30.0 if src_fps_raw > 120 else src_fps_raw
+
         out_fps     = self.target_fps if self.target_fps is not None else src_fps
         # 원본에서 몇 프레임마다 1프레임을 추출할지 계산
         frame_step  = max(1, round(src_fps / out_fps))
@@ -375,7 +381,7 @@ class MediaPipePoseEstimator:
                 "coordinate_note": "hip_centered, torso_scaled (unitless, original unit: normalized 0~1)",
                 "confidence_thresholds": {"high": VIS_HIGH, "low": VIS_LOW},
             },
-            "source_fps": src_fps,
+            "source_fps": src_fps_raw,
             "output_fps": out_fps,
             "frame_step": frame_step,
             "width": width,
@@ -404,7 +410,9 @@ class MediaPipePoseEstimator:
                     src_frame_id += 1
                     continue
 
-                timestamp_ms = int(src_frame_id * 1000 / src_fps)
+                # out_frame_id 기반 고정 간격 — 단조증가 절대 보장
+                # container_ts_ms / src_frame_id 기반은 WebM 등에서 역전 발생 가능
+                timestamp_ms = int(out_frame_id * 1000.0 / out_fps)
 
                 mp_image = mp.Image(
                     image_format=mp.ImageFormat.SRGB,

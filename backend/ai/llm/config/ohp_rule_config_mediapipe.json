@@ -22,6 +22,48 @@
     "shoulder_collapse_ratio": "answer range=0.429060~0.676700, wrong range=0.145743~0.955606 -> thresholds <0.40 or >0.70"
   },
 
+  "overhead_press": {
+    "front": {
+      "_note": "feature suffix _max를 직접 조건 feature명에 사용하면 _segment_direct_value가 빈 suffix fallback으로 해당 키를 직접 참조함",
+      "issues": [
+        {
+          "issue": "incomplete_lockout",
+          "description": "팔꿈치 완전 신전 미완성",
+          "phase": "top",
+          "condition_logic": "OR",
+          "conditions": [
+            { "feature": "left_elbow_extension_angle_max", "operator": "<", "threshold": 155 },
+            { "feature": "right_elbow_extension_angle_max", "operator": "<", "threshold": 155 }
+          ],
+          "min_confidence": 0.4,
+          "_threshold_note": "rep 내 최대 팔꿈치 신전각이 155° 미만이면 락아웃 미완성으로 판단"
+        },
+        {
+          "issue": "left_right_asymmetry",
+          "description": "좌우 비대칭",
+          "phase": "press",
+          "condition_logic": "AND",
+          "conditions": [
+            { "feature": "left_right_wrist_height_diff", "operator": ">", "threshold": 0.15 }
+          ],
+          "min_confidence": 0.4,
+          "_threshold_note": "손목 높이 차이가 torso_length의 15% 초과 시 좌우 비대칭으로 판단"
+        },
+        {
+          "issue": "torso_lateral_lean",
+          "description": "몸통 측면 기울기",
+          "phase": "press",
+          "condition_logic": "AND",
+          "conditions": [
+            { "feature": "torso_lateral_lean_angle", "operator": ">", "threshold": 15.0 }
+          ],
+          "min_confidence": 0.4,
+          "_threshold_note": "어깨-골반 수직선 기울기 15° 초과 시 몸통 기울기로 판단"
+        }
+      ]
+    }
+  },
+
   "plank": {
     "side": {
       "issues": [

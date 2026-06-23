@@ -866,8 +866,8 @@ def _summarize_segment(
 def _detect_reps_from_frame_features(
     frame_features: List[Dict[str, Any]],
     signal_key: str = "wrist_center_y",
-    smoothing_window: int = 15,
-    valley_ratio: float = 0.30,
+    smoothing_window: int = 5,
+    valley_ratio: float = 0.50,
     min_rep_frames: int = 20,
 ) -> List[Dict[str, Any]]:
     """wrist_center_y 신호에서 rep 구간을 자동 감지한다 (valley-based)."""
@@ -875,8 +875,12 @@ def _detect_reps_from_frame_features(
         f for f in frame_features
         if isinstance(f, dict) and _is_number(f.get(signal_key))
     ]
-    if len(valid_frames) < 10:
+    n_valid = len(valid_frames)
+    if n_valid < 6:
         return []
+
+    # 유효 프레임이 적을 때 min_rep_frames를 동적으로 축소 (최소 3, 상한 원래 기본값)
+    min_rep_frames = min(min_rep_frames, max(3, n_valid // 4))
 
     values = [float(f[signal_key]) for f in valid_frames]
     n    = len(values)
@@ -2544,7 +2548,7 @@ def coaching_generator_node(state: FeedbackState) -> dict:
     analysis_result = state.get("analysis_result") or {}
     exercise        = state.get("exercise")
     exercise_key    = _exercise_rule_key(exercise)
-    camera_view     = str(state.get("camera_view") or _EXERCISE_DEFAULT_VIEW.get(exercise_key, ""))
+    camera_view     = str(_EXERCISE_DEFAULT_VIEW.get(exercise_key) or state.get("camera_view") or "")
     errors_found    = analysis_result.get("errors", [])
     print(f"[coaching_generator] exercise_key={exercise_key} | camera_view={camera_view} | errors={len(errors_found)}개")
 
@@ -2577,10 +2581,13 @@ def coaching_generator_node(state: FeedbackState) -> dict:
 def set_text_summarize_node(state:FeedbackState) -> dict:
     print("평가 결과 text정리 노드")
     set_feedback = state.get("set_feedback") or {}
+    exercise = str(state.get("exercise") or "운동")
+    exercise_key = _exercise_rule_key(exercise)
+    camera_view = str(_EXERCISE_DEFAULT_VIEW.get(exercise_key) or state.get("camera_view") or "")
     refined_feedback = _refine_set_feedback_text(
         set_feedback=set_feedback,
-        exercise=str(state.get("exercise") or "운동"),
-        camera_view=str(state.get("camera_view") or ""),
+        exercise=exercise,
+        camera_view=camera_view,
     )
     timeline_feedback = refined_feedback.get("timeline_feedback")
     raw_feedback = str(refined_feedback.get("raw") or refined_feedback.get("coaching", ""))
