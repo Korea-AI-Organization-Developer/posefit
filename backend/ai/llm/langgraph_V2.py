@@ -2544,7 +2544,7 @@ def coaching_generator_node(state: FeedbackState) -> dict:
     analysis_result = state.get("analysis_result") or {}
     exercise        = state.get("exercise")
     exercise_key    = _exercise_rule_key(exercise)
-    camera_view     = str(state.get("camera_view") or _EXERCISE_DEFAULT_VIEW.get(exercise_key, ""))
+    camera_view     = str(_EXERCISE_DEFAULT_VIEW.get(exercise_key) or state.get("camera_view") or "")
     errors_found    = analysis_result.get("errors", [])
     print(f"[coaching_generator] exercise_key={exercise_key} | camera_view={camera_view} | errors={len(errors_found)}개")
 
@@ -2577,10 +2577,13 @@ def coaching_generator_node(state: FeedbackState) -> dict:
 def set_text_summarize_node(state:FeedbackState) -> dict:
     print("평가 결과 text정리 노드")
     set_feedback = state.get("set_feedback") or {}
+    exercise = str(state.get("exercise") or "운동")
+    exercise_key = _exercise_rule_key(exercise)
+    camera_view = str(_EXERCISE_DEFAULT_VIEW.get(exercise_key) or state.get("camera_view") or "")
     refined_feedback = _refine_set_feedback_text(
         set_feedback=set_feedback,
-        exercise=str(state.get("exercise") or "운동"),
-        camera_view=str(state.get("camera_view") or ""),
+        exercise=exercise,
+        camera_view=camera_view,
     )
     timeline_feedback = refined_feedback.get("timeline_feedback")
     raw_feedback = str(refined_feedback.get("raw") or refined_feedback.get("coaching", ""))
