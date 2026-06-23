@@ -281,7 +281,8 @@ class ReportService:
             user_id, exercise_id, limit=30
         )
         if not feedback_texts and not analysis_results:
-            return None
+            logger.warning("[AI평가] feedback_texts와 analysis_results 모두 비어있음 → 통계만으로 AI 평가 시도")
+            # 데이터 없어도 report_stats(세션 수·점수 등)으로 AI 평가 진행. long_term 분기는 report_stats로 라우팅.
 
         # 장기 추세 지표 — 코드가 deterministic 하게 계산(원칙 2: LLM 은 판단 안 함, 서술만).
         daily_metrics = await self.repo.get_daily_metrics(
@@ -300,7 +301,15 @@ class ReportService:
 
         api_key = settings.google_api_key or settings.gemini_api_key
         if not api_key:
+            logger.warning("[AI평가] API 키 없음 → 규칙 기반으로 폴백")
             return None
+
+        logger.warning(
+            "[AI평가] LangGraph 호출 시작: sessions=%d feedback=%d analysis=%d",
+            summary.sessions_count,
+            len(feedback_texts),
+            len(analysis_results),
+        )
 
         try:
             # langgraph_V1 의 통합 그래프(long_term 분기)를 호출한다.

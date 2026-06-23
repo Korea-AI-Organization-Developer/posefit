@@ -158,9 +158,9 @@ def route_feedback(state: FeedbackState) -> Literal["set", "daily", "long_term"]
     ):
         return "daily"
 
-    # historical_analysis_results 또는 historical_feedback_texts 가 있으면 종합(long_term) 평가로 분기.
-    # (리포트 화면은 누적 피드백 텍스트만으로 종합 평가를 요청한다)
-    if state.get("historical_analysis_results") or state.get("historical_feedback_texts"):
+    # historical_analysis_results / historical_feedback_texts 또는 report_stats(누적 통계)가 있으면
+    # 종합(long_term) 평가로 분기. 피드백 데이터가 없어도 세션 통계만으로 AI 평가 가능.
+    if state.get("historical_analysis_results") or state.get("historical_feedback_texts") or state.get("report_stats"):
         return "long_term"
 
     return "set"
