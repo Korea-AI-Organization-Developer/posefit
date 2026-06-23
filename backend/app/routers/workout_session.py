@@ -1,16 +1,33 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.workout import NextSessionResponse, SaveSessionResponse, StopSessionResponse
-from app.schemas.workout_session import WorkoutSessionCreateRequest, WorkoutSessionRead
+from app.schemas.workout_session import WorkoutSessionCreateRequest, WorkoutSessionListResponse, WorkoutSessionRead
 from app.services.workout_session import WorkoutSessionService
 
 router = APIRouter(prefix="/workout-sessions", tags=["Sessions"])
+
+
+@router.get("", response_model=WorkoutSessionListResponse)
+async def list_workout_sessions(
+    saved: bool | None = Query(default=None),
+    exercise_id: int | None = Query(default=None, alias="exerciseId"),
+    cursor: int | None = Query(default=None),
+    limit: int = Query(default=6, ge=1, le=50),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await WorkoutSessionService(db).list_saved(
+        user.id,
+        exercise_id=exercise_id,
+        cursor=cursor,
+        limit=limit,
+    )
 
 
 @router.post("", response_model=WorkoutSessionRead, status_code=status.HTTP_201_CREATED)

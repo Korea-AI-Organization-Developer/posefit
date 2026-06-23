@@ -16,7 +16,13 @@ from app.repositories.feedback import FeedbackRepository
 from app.repositories.workout_session import WorkoutSessionRepository
 from app.schemas.feedback import FeedbackRead, FeedbackTimelineItem
 from app.schemas.workout import StopSessionResponse
-from app.schemas.workout_session import WorkoutSessionCreateRequest, WorkoutSessionRead
+from app.schemas.workout_session import (
+    EmbeddedExercise,
+    WorkoutSessionCreateRequest,
+    WorkoutSessionListResponse,
+    WorkoutSessionRead,
+    WorkoutSessionSummary,
+)
 
 UPLOAD_DIR = Path("uploads/workout_sessions")
 # 저장 영상 루트 — 컨테이너에서는 볼륨 마운트 경로(/app/saves)를 env 로 주입.
@@ -31,6 +37,38 @@ class WorkoutSessionService:
         self.exercise_repo = ExerciseRepository(db)
         self.feedback_repo = FeedbackRepository(db)
         self.db = db
+
+    async def list_saved(
+        self,
+        user_id: int,
+        exercise_id: int | None = None,
+        cursor: int | None = None,
+        limit: int = 6,
+    ) -> WorkoutSessionListResponse:
+        rows = await self.repo.list_saved(user_id, exercise_id, cursor, limit)
+        has_next = len(rows) > limit
+        items = rows[:limit]
+        summaries = [
+            WorkoutSessionSummary(
+                id=s.id,
+                exercise=EmbeddedExercise(id=s.exercise.id, name_ko=s.exercise.name_ko),
+                status=s.status,
+                started_at=s.started_at,
+                ended_at=s.ended_at,
+                duration_sec=(
+                    int((s.ended_at - s.started_at).total_seconds()) if s.ended_at else None
+                ),
+                score=s.score,
+                rep_count=s.rep_count,
+                saved=s.saved,
+                video_url=s.video_url,
+            )
+            for s in items
+        ]
+        return WorkoutSessionListResponse(
+            items=summaries,
+            next_cursor=items[-1].id if has_next and items else None,
+        )
 
     async def create(self, user_id: int, req: WorkoutSessionCreateRequest) -> WorkoutSessionRead:
         exercise = await self.exercise_repo.get_by_id(req.exercise_id)
@@ -204,16 +242,18 @@ class WorkoutSessionService:
         exercise_name = exercise.name_ko if exercise else str(session.exercise_id)
 
         date_str = session.started_at.strftime("%Y%m%d")
-        dest_dir = VIDEO_SAVE_BASE / str(user_id) / exercise_name
+        rel_path = Path(str(user_id)) / exercise_name / f"{date_str}_{session_id}.mp4"
+        dest_dir = VIDEO_SAVE_BASE / rel_path.parent
         dest_dir.mkdir(parents=True, exist_ok=True)
-        dest_path = dest_dir / f"{date_str}_{session_id}.mp4"
+        dest_path = VIDEO_SAVE_BASE / rel_path
 
         temp_path = Path(session.video_url.lstrip("/"))
         if not temp_path.exists():
             raise HTTPException(status_code=409, detail="임시 영상 파일이 존재하지 않습니다")
 
         shutil.move(str(temp_path), str(dest_path))
-        await self.repo.update_saved(session, str(dest_path))
+        # /saves/... 상대 경로로 저장 — Next.js 프록시(/api/video/saves/...)가 서빙
+        await self.repo.update_saved(session, f"/saves/{rel_path.as_posix()}")
         await self.db.commit()
 
     async def discard_session(self, session_id: int, user_id: int) -> None:
@@ -224,9 +264,13 @@ class WorkoutSessionService:
             raise HTTPException(status_code=409, detail="이미 저장된 세션은 폐기할 수 없습니다")
 
         if session.video_url:
-            temp_path = Path(session.video_url.lstrip("/"))
-            if temp_path.exists():
-                temp_path.unlink()
+            url = session.video_url
+            if url.startswith("/saves/"):
+                file_path = VIDEO_SAVE_BASE / url.removeprefix("/saves/")
+            else:
+                file_path = Path(url.lstrip("/"))
+            if file_path.exists():
+                file_path.unlink()
 
         await self.db.commit()
 
