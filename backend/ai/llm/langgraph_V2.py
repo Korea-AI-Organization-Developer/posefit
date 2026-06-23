@@ -866,8 +866,8 @@ def _summarize_segment(
 def _detect_reps_from_frame_features(
     frame_features: List[Dict[str, Any]],
     signal_key: str = "wrist_center_y",
-    smoothing_window: int = 15,
-    valley_ratio: float = 0.30,
+    smoothing_window: int = 5,
+    valley_ratio: float = 0.50,
     min_rep_frames: int = 20,
 ) -> List[Dict[str, Any]]:
     """wrist_center_y 신호에서 rep 구간을 자동 감지한다 (valley-based)."""
