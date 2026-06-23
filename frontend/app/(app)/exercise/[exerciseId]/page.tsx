@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Suspense } from "react";
 import { ArrowLeft, Play } from "lucide-react";
 
 import { Card, CardBody, CardHeader } from "@/components/ui";
 import { getExerciseDetail } from "@/lib/api/exercises";
 import { StartButton } from "./start-button";
-import { TodayFeedbacks } from "./today-feedbacks";
 
 export const metadata: Metadata = { title: "정답 영상" };
 
@@ -93,25 +91,25 @@ export default async function ExerciseDetailPage({
       </div>
 
       {/* 오늘(KST) 이 종목에서 받은 피드백 — GET /exercises/{id}/feedbacks */}
-      <div className="mt-6">
+      {/* <div className="mt-6">
         <Suspense fallback={<TodayFeedbacksFallback />}>
           <TodayFeedbacks exerciseId={exercise.id} />
         </Suspense>
-      </div>
+      </div> */}
     </div>
   );
 }
 
 /* 피드백 로딩 중 자리표시 — 카드 골격만 보여준다 */
-function TodayFeedbacksFallback() {
-  return (
-    <Card>
-      <CardHeader>
-        <h2 className="text-sm font-semibold">오늘의 피드백</h2>
-      </CardHeader>
-      <CardBody>
-        <p className="text-sm text-text-subtle">불러오는 중…</p>
-      </CardBody>
-    </Card>
-  );
-}
+// function TodayFeedbacksFallback() {
+//   return (
+//     <Card>
+//       <CardHeader>
+//         <h2 className="text-sm font-semibold">오늘의 피드백</h2>
+//       </CardHeader>
+//       <CardBody>
+//         <p className="text-sm text-text-subtle">불러오는 중…</p>
+//       </CardBody>
+//     </Card>
+//   );
+// }

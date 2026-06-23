@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { ArrowLeft, Loader2, Play, Sparkles, Square } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ChevronDown, ChevronUp, Loader2, Play, Sparkles, Square } from "lucide-react";
 
 import {
   Badge,
@@ -27,6 +27,7 @@ import {
   summarizeExercise,
   type ExerciseFeedbackSummary,
 } from "@/lib/api/workout-client";
+import { logVideoFile } from "./actions";
 
 /*
  * SCR-08 운동 실행(멀티 세트) + SCR-09 결과.
@@ -35,7 +36,7 @@ import {
  *   이번 묶음 전체 종합 피드백을 받는다.
  * 포즈 추정·채점은 백엔드 담당(현재 placeholder). 카메라 녹화·업로드는 실제 동작.
  */
-type Phase = "idle" | "recording" | "processing";
+type Phase = "idle" | "countdown" | "recording" | "processing";
 
 const SEVERITY: Record<FeedbackSeverity, { tone: BadgeTone; label: string }> = {
   info: { tone: "neutral", label: "정보" },
@@ -59,6 +60,7 @@ function clock(totalSec: number): string {
 
 export function WorkoutLive({
   exercise,
+  initialSessionId,
 }: {
   exercise: ExerciseDetailResponse;
   initialSessionId?: number | null;
@@ -75,6 +77,16 @@ export function WorkoutLive({
   const [summary, setSummary] = useState<ExerciseFeedbackSummary | null>(null);
   const [finishing, startFinish] = useTransition();
 
+  const [countdown, setCountdown] = useState(0);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoFilename, setVideoFilename] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (videoUrl) URL.revokeObjectURL(videoUrl);
+    };
+  }, [videoUrl]);
+
   const granted = permission === "granted";
 
   // 녹화 중 1초 틱 — 경과 시간 표시.
@@ -84,8 +96,15 @@ export function WorkoutLive({
     return () => clearInterval(id);
   }, [phase]);
 
-  function handleStart() {
+  async function handleStart() {
     setError(null);
+    // 5초 카운트다운
+    setPhase("countdown");
+    for (let i = 5; i >= 1; i--) {
+      setCountdown(i);
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    setCountdown(0);
     setElapsed(0);
     recordStartRef.current = new Date().toISOString();
     cameraRef.current?.startRecording();
@@ -97,15 +116,20 @@ export function WorkoutLive({
     const startAt = recordStartRef.current ?? new Date().toISOString();
     const endAt = new Date().toISOString();
     try {
-      const rec = await cameraRef.current?.stopRecording();
-      if (!rec) throw new Error("녹화 영상을 가져오지 못했어요. 다시 시도해 주세요.");
+      const recorded = await cameraRef.current?.stopRecording() ?? null;
+      if (recorded) {
+        setVideoFilename(recorded.filename);
+        const url = URL.createObjectURL(recorded.blob);
+        setVideoUrl(url);
+        await logVideoFile(recorded.filename, recorded.blob.size);
+      } else throw new Error("녹화 영상을 가져오지 못했어요. 다시 시도해 주세요.");
 
       const res = await stopSet({
         exerciseId: exercise.id,
         startAt,
         endAt,
-        blob: rec.blob,
-        filename: rec.filename,
+        blob: recorded.blob,
+        filename: recorded.filename,
       });
       setSets((prev) => [
         ...prev,
@@ -218,19 +242,25 @@ export function WorkoutLive({
         <CameraView
           ref={cameraRef}
           onPermissionChange={setPermission}
-          overlay={<CameraOverlay phase={phase} />}
+          overlay={<CameraOverlay phase={phase} countdown={countdown} />}
           className="aspect-video w-full"
         />
 
         <div className="flex flex-col gap-3">
           <div className="rounded-md border border-border bg-surface p-4">
             <p className="text-xs text-text-subtle">
-              {phase === "recording" ? "녹화 중" : "다음 세트"}
+              {phase === "recording" ? "녹화 중" : "현재 세트"}
             </p>
             <p className="mt-1 font-mono text-2xl font-semibold tabular-nums">
               {phase === "recording" ? clock(elapsed) : `세트 ${sets.length + 1}`}
             </p>
           </div>
+
+          {sets.length > 0 && (
+            <div className="rounded-md border border-border bg-surface p-4">
+              <SetLast sets={sets} />
+            </div>
+          )}
 
           {phase === "recording" ? (
             <button
@@ -272,24 +302,120 @@ export function WorkoutLive({
           <p className="text-center text-xs text-text-subtle">
             {phase === "recording"
               ? "STOP을 누르면 이 세트를 분석해요"
-              : phase === "processing"
-                ? "세트를 분석하고 있어요…"
-                : !granted
-                  ? "카메라 권한을 허용해 주세요"
-                  : sets.length === 0
-                    ? "START → 한 세트를 녹화하고 피드백을 받아요"
-                    : "다음 세트를 하거나, 운동을 마치고 종합 피드백을 받아요"}
+              : phase === "countdown"
+                ? "카메라를 바라보고 준비해 주세요"
+                : phase === "processing"
+                  ? "세트를 분석하고 있어요…"
+                  : !granted
+                    ? "카메라 권한을 허용해 주세요"
+                    : sets.length === 0
+                      ? "START → 한 세트를 녹화하고 피드백을 받아요"
+                      : "다음 세트를 하거나, 운동을 마치고 종합 피드백을 받아요"}
           </p>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* 세트별 피드백 누적 — 운동 페이지 하단 */}
-      {sets.length > 0 && (
-        <div className="mt-10">
-          <h2 className="text-sm font-semibold text-text-muted">
-            세트별 피드백 ({sets.length})
-          </h2>
-          <SetList sets={sets} className="mt-3" />
+/* 가장 최근 세트 1건 — 와이어프레임 plank_fullscreen_redesign.html 기준 */
+function SetLast({ sets, className }: { sets: SetResult[]; className?: string }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const last = sets[sets.length - 1];
+  if (!last) return null;
+
+  const { feedback } = last;
+
+  // 기본 3개 표시, 나머지는 접기/펼치기
+  const visibleTimeline = feedback.timeline
+    ? feedback.timeline.slice(0, expanded ? undefined : 3)
+    : [];
+  // 숨겨진 구간 수
+  const hiddenCount = feedback.timeline
+    ? Math.max(0, feedback.timeline.length - 3)
+    : 0;
+
+  return (
+    <div className={cn(className)}>
+      {/* 헤더: "N 세트 피드백" (좌) + 심각도 뱃지 (우) */}
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-sm text-text-muted">{last.setNumber} 세트 피드백</span>
+        <Badge tone={SEVERITY[feedback.severity].tone}>
+          {SEVERITY[feedback.severity].label}
+        </Badge>
+      </div>
+
+      {/* 요약 카드: summary 있으면 summary, 없으면 content 폴백. timeline 있으면 바 표시 */}
+      <div className="mb-2.5 rounded-lg border border-border bg-surface px-4 py-3.5">
+        <p className="text-sm leading-relaxed">
+          {/* feedback.summary: 백엔드 확정 전 임시 필드명 */}
+          {feedback.summary ?? feedback.content}
+        </p>
+
+        {/* 타임라인 바 — feedback.timeline 데이터 있을 때만 렌더 */}
+        {feedback.timeline && feedback.timeline.length > 0 && (
+          <>
+            <div className="mt-2.5 flex h-[9px] overflow-hidden rounded-full">
+              {feedback.timeline.map((seg, i) => (
+                // seg.isGood: true=성공 구간(초록), false=오류 구간(빨강)
+                <div
+                  key={i}
+                  className={cn("flex-1", seg.isGood ? "bg-success" : "bg-danger")}
+                />
+              ))}
+            </div>
+            <div className="mt-1 flex justify-between text-xs text-text-subtle">
+              {/* 첫 구간 레이블 / 마지막 구간 레이블 */}
+              {/* seg.timestamp: 백엔드 확정 전 임시 필드명 */}
+              <span>{feedback.timeline[0].timestamp}</span>
+              <span>{feedback.timeline[feedback.timeline.length - 1].timestamp}</span>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* 구간 카드 목록 — feedback.timeline 데이터 있을 때만 렌더 */}
+      {feedback.timeline && feedback.timeline.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          {visibleTimeline.map((seg, i) => (
+            <div
+              key={i}
+              className={cn(
+                "flex items-start gap-2 rounded-r-md border border-border bg-surface px-2.5 py-2",
+                // seg.isGood: true=성공(초록 좌측 테두리), false=오류(빨강 좌측 테두리)
+                seg.isGood ? "border-l-[3px] border-l-success" : "border-l-[3px] border-l-danger",
+              )}
+            >
+              {seg.isGood ? (
+                <Check className="mt-0.5 size-4 shrink-0 text-success" aria-hidden />
+              ) : (
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-danger" aria-hidden />
+              )}
+              <div>
+                {/* seg.timestamp: 구간 시각 레이블. 백엔드 확정 전 임시 필드명 */}
+                <p className="text-xs font-medium">{seg.timestamp}</p>
+                {/* seg.comment: 구간 설명 텍스트. 백엔드 확정 전 임시 필드명 */}
+                <p className="text-xs text-text-subtle">{seg.comment}</p>
+              </div>
+            </div>
+          ))}
+
+          {/* 숨겨진 구간이 있을 때만 펼치기/접기 버튼 표시 */}
+          {hiddenCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setExpanded((e) => !e)}
+              className="mt-2 flex w-full items-center justify-center gap-1 py-1.5 text-xs text-text-muted transition-colors hover:text-text"
+            >
+              {expanded ? (
+                <ChevronUp className="size-3.5" aria-hidden />
+              ) : (
+                <ChevronDown className="size-3.5" aria-hidden />
+              )}
+              {expanded ? "구간 접기" : `구간 ${hiddenCount}개 더 보기`}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -304,12 +430,6 @@ function SetList({ sets, className }: { sets: SetResult[]; className?: string })
         <li key={s.sessionId}>
           <Card>
             <CardBody className="flex gap-3 py-4">
-              <div className="flex shrink-0 flex-col items-center justify-center rounded-sm bg-surface-muted px-3 py-2">
-                <span className="text-[10px] text-text-subtle">SET</span>
-                <span className="font-mono text-lg font-semibold tabular-nums">
-                  {s.setNumber}
-                </span>
-              </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <Badge tone={SEVERITY[s.feedback.severity].tone}>
@@ -337,7 +457,21 @@ function SetList({ sets, className }: { sets: SetResult[]; className?: string })
 }
 
 /* 카메라 위 가이드 오버레이 */
-function CameraOverlay({ phase }: { phase: Phase }) {
+function CameraOverlay({ phase, countdown }: { phase: Phase; countdown: number }) {
+  if (phase === "countdown") {
+    return (
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/60">
+        <div className="flex flex-col items-center gap-3">
+          <span className="font-mono text-[9rem] font-black leading-none text-white drop-shadow-[0_0_40px_rgba(255,255,255,0.5)]">
+            {countdown}
+          </span>
+          <span className="rounded-full border border-white/30 px-4 py-1 text-sm font-medium tracking-widest text-white/80 uppercase">
+            준비
+          </span>
+        </div>
+      </div>
+    );
+  }
   if (phase === "recording") {
     return (
       <>
@@ -362,7 +496,7 @@ function CameraOverlay({ phase }: { phase: Phase }) {
   return (
     <div className="pointer-events-none absolute inset-0 flex items-end justify-center pb-4">
       <span className="rounded-sm bg-black/60 px-2 py-1 text-xs text-white">
-        준비되면 START를 눌러요
+        START를 누르면 5초 카운트다운 후 녹화가 시작돼요.
       </span>
     </div>
   );
