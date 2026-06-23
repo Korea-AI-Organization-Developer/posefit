@@ -96,9 +96,6 @@ class Agreement(Base):
     privacy_agreed: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("0"), comment="개인정보 수집·이용(필수)"
     )
-    biometric_agreed: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("0"), comment="바이오정보(얼굴) 처리(필수)"
-    )
     marketing_agreed: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("0"), comment="마케팅 수신(선택)"
     )

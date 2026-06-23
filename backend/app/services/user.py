@@ -95,7 +95,6 @@ class UserService:
             user_id,
             req.tos_agreed,
             req.privacy_agreed,
-            req.biometric_agreed,
             req.marketing_agreed,
         )
         await self.db.commit()

@@ -59,7 +59,6 @@ class AgreementRead(CamelModel):
     id: int
     tos_agreed: bool
     privacy_agreed: bool
-    biometric_agreed: bool
     marketing_agreed: bool
     agreed_at: datetime
 
@@ -67,7 +66,6 @@ class AgreementRead(CamelModel):
 class AgreementCreateRequest(CamelModel):
     tos_agreed: bool
     privacy_agreed: bool
-    biometric_agreed: bool = False  # 얼굴 인식 제거로 미사용(컬럼 호환 위해 유지)
     marketing_agreed: bool = False
 
 
