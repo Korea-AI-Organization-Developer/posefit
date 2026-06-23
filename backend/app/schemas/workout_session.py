@@ -22,3 +22,26 @@ class WorkoutSessionRead(CamelModel):
     saved: bool
     video_url: str | None
     created_at: datetime
+
+
+class EmbeddedExercise(CamelModel):
+    id: int
+    name_ko: str
+
+
+class WorkoutSessionSummary(CamelModel):
+    id: int
+    exercise: EmbeddedExercise
+    status: SessionStatus
+    started_at: datetime
+    ended_at: datetime | None
+    duration_sec: int | None
+    score: Decimal | None
+    rep_count: int | None
+    saved: bool
+    video_url: str | None
+
+
+class WorkoutSessionListResponse(CamelModel):
+    items: list[WorkoutSessionSummary]
+    next_cursor: int | None

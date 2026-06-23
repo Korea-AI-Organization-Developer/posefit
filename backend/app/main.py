@@ -47,6 +47,12 @@ _uploads_dir = Path("uploads")
 _uploads_dir.mkdir(exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
+# 영구 저장 영상 — VIDEO_SAVE_BASE(기본 saves/, Docker: /app/saves)를 /saves 로 서빙.
+# 브라우저가 /saves/{user_id}/{exercise}/{filename} 으로 직접 접근한다.
+_saves_dir = Path(os.getenv("VIDEO_SAVE_BASE", "saves"))
+_saves_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/saves", StaticFiles(directory=str(_saves_dir)), name="saves")
+
 # 허용 origin — 콤마 구분 env(CORS_ORIGINS)에서 읽고, 미설정 시 로컬 개발 기본값.
 # 현 플로우는 브라우저가 Next BFF 만 호출하므로 영향이 적지만, 공개 origin 대비 env 화.
 _cors_origins = [
