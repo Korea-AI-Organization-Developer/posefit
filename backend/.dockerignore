@@ -9,6 +9,7 @@
 uploads/
 saves/
 .chroma/
+!ai/rag/.chroma/
 *.log
 
 # 런타임 다운로드 모델 (컨테이너에서 받음)
