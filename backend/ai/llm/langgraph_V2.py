@@ -2829,26 +2829,104 @@ def set_review_node(state: FeedbackState) -> dict:
 # 출력: daily_feedback
 # 역할: 오늘 수행한 전체 세트 평가
 # =========================================================
-def daily_feedback_node(state:FeedbackState) -> dict:
+def daily_feedback_node(state: FeedbackState) -> dict:
+    """today_set_results(세트별 content·score)를 코드로 집계해 daily_feedback 구조체를 만든다."""
     print("세트 종합 평가 노드")
+    today_set_results = state.get("today_set_results") or []
+
+    if not today_set_results:
+        return {"daily_feedback": {"total_sets": 0, "avg_score": None, "score_trend": [], "set_summaries": []}}
+
+    scores = [
+        float(item["score"]) for item in today_set_results
+        if item.get("score") is not None
+    ]
+    avg_score = round(sum(scores) / len(scores), 1) if scores else None
+
+    set_summaries = [
+        {
+            "set_number": item.get("set_number", i + 1),
+            "content": str(item.get("content") or ""),
+            "score": item.get("score"),
+        }
+        for i, item in enumerate(today_set_results)
+    ]
+
+    print(f"[daily_feedback] 총 {len(today_set_results)}세트 | 평균점수={avg_score} | 점수추이={scores}")
     return {
         "daily_feedback": {
-            "summary": "",
-            "repeated_errors": [],
-            "fatigue_trend": "",
+            "total_sets": len(today_set_results),
+            "avg_score": avg_score,
+            "score_trend": scores,
+            "set_summaries": set_summaries,
         }
     }
 
-def daily_text_summarize_node(state:FeedbackState) -> dict:
+
+def daily_text_summarize_node(state: FeedbackState) -> dict:
+    """daily_feedback 구조체를 LLM에 넘겨 자연어 feedback_text를 생성한다 (LLM 1회)."""
     print("세트 종합 평가 결과 text정리 노드")
-    return {
-        "feedback_text": {
-            "summary": "",
-            "main_issue": "",
-            "coaching": "",
-            "next_action": "",
+    daily_feedback = state.get("daily_feedback") or {}
+    exercise = str(state.get("exercise") or "운동")
+
+    set_summaries = daily_feedback.get("set_summaries") or []
+    total_sets = daily_feedback.get("total_sets") or len(set_summaries)
+    avg_score = daily_feedback.get("avg_score")
+    score_trend = daily_feedback.get("score_trend") or []
+
+    fallback = {"summary": "", "main_issue": "", "coaching": "", "next_action": ""}
+
+    if not set_summaries:
+        return {"feedback_text": fallback}
+
+    sets_lines = "\n".join(
+        f"[세트 {s['set_number']}] 점수:{s.get('score') if s.get('score') is not None else '없음'} - {s['content']}"
+        for s in set_summaries
+    )
+    score_trend_str = " → ".join(str(s) for s in score_trend) if score_trend else "점수 없음"
+
+    system_prompt = (
+        "당신은 운동 코치입니다. 오늘 수행한 세트들의 피드백을 종합해 일일 피드백을 작성하세요.\n"
+        "- 각 세트 피드백에서 반복되는 문제 패턴을 파악하세요.\n"
+        "- 점수 추이를 반영해 전반적인 컨디션 변화를 평가하세요.\n"
+        "- 결과는 한국어로 간결하게 작성하세요.\n\n"
+        "반드시 아래 JSON 형식으로만 답하세요:\n"
+        '{"summary": "오늘 전체를 1~2문장으로 요약", '
+        '"main_issue": "가장 반복된 문제 1가지", '
+        '"coaching": "세트별 변화를 반영한 구체적 조언", '
+        '"next_action": "다음 운동에서 가장 중요하게 고칠 점 1가지"}'
+    )
+    user_prompt = (
+        f"운동: {exercise}\n"
+        f"총 세트: {total_sets}세트 | 평균 점수: {avg_score}점 | 점수 추이: {score_trend_str}\n\n"
+        f"세트별 피드백:\n{sets_lines}"
+    )
+
+    try:
+        response = get_llm().invoke([
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ])
+        raw = response.content
+        if isinstance(raw, list):
+            raw = "\n".join(
+                part["text"] for part in raw if isinstance(part, dict) and "text" in part
+            )
+        json_match = re.search(r"\{[\s\S]*\}", str(raw).strip())
+        if not json_match:
+            return {"feedback_text": fallback}
+        parsed = json.loads(json_match.group())
+        return {
+            "feedback_text": {
+                "summary":     str(parsed.get("summary") or ""),
+                "main_issue":  str(parsed.get("main_issue") or ""),
+                "coaching":    str(parsed.get("coaching") or ""),
+                "next_action": str(parsed.get("next_action") or ""),
+            }
         }
-    }
+    except Exception as e:
+        print(f"[daily_text_summarize] LLM 실패: {e}")
+        return {"feedback_text": fallback}
 
 
 def _react_review_daily_final_feedback(
