@@ -164,6 +164,10 @@ class WorkoutSessionService:
         result = await asyncio.to_thread(posefit_graph.invoke, state)
         final_fb = result.get("final_feedback", {})
 
+        score_pct = final_fb.get("score_summary", {}).get("time_weighted_score_pct")
+        if score_pct is not None:
+            session.score = score_pct
+
         # coaching 텍스트만 DB에 저장 (summary·timeline은 응답 전용)
         # "set" 분기: final_feedback = {raw, summary, timestamp} — "feedback_text.coaching" 구조 아님
         comment = final_fb.get("raw") or final_fb.get("feedback_text", {}).get("coaching", "")
