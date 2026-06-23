@@ -10,7 +10,7 @@ import {
 } from "@/components/ui";
 import { submitAgreementsAction } from "./actions";
 
-type Key = "tos" | "privacy" | "biometric" | "marketing";
+type Key = "tos" | "privacy" | "marketing";
 
 interface Item {
   key: Key;
@@ -33,12 +33,6 @@ const ITEMS: Item[] = [
     doc: "회사는 회원 가입, 서비스 제공, 운동 기록 분석을 위해 닉네임·생년월일·신체정보 등을 수집·이용합니다. 보관 기간 및 파기 절차는 개인정보 처리방침을 따릅니다. (이하 더미 텍스트)",
   },
   {
-    key: "biometric",
-    label: "바이오정보(얼굴) 처리",
-    required: true,
-    doc: "본인 확인을 위해 얼굴 이미지로부터 추출한 특징값(임베딩)을 처리합니다. 원본 이미지는 저장하지 않으며, 회원은 언제든 등록을 해제할 수 있습니다. (이하 더미 텍스트)",
-  },
-  {
     key: "marketing",
     label: "마케팅 정보 수신",
     required: false,
@@ -46,13 +40,12 @@ const ITEMS: Item[] = [
   },
 ];
 
-const REQUIRED_KEYS: Key[] = ["tos", "privacy", "biometric"];
+const REQUIRED_KEYS: Key[] = ["tos", "privacy"];
 
 export function TermsForm() {
   const [checked, setChecked] = useState<Record<Key, boolean>>({
     tos: false,
     privacy: false,
-    biometric: false,
     marketing: false,
   });
   const [openDoc, setOpenDoc] = useState<Item | null>(null);
@@ -65,7 +58,7 @@ export function TermsForm() {
   const requiredMet = REQUIRED_KEYS.every((k) => checked[k]);
 
   function toggleAll(next: boolean) {
-    setChecked({ tos: next, privacy: next, biometric: next, marketing: next });
+    setChecked({ tos: next, privacy: next, marketing: next });
   }
 
   function submit() {
@@ -74,7 +67,6 @@ export function TermsForm() {
       const res = await submitAgreementsAction({
         tosAgreed: checked.tos,
         privacyAgreed: checked.privacy,
-        biometricAgreed: checked.biometric,
         marketingAgreed: checked.marketing,
       });
       if (res?.error) setError(res.error);
