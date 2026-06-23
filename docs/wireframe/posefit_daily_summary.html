@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>포즈핏 — 당일 운동 종합 피드백 SCR-10</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #f5f5f0;
+    --frame-bg: #ffffff;
+    --line: #2b2b2b;
+    --line-soft: #8a8a8a;
+    --line-faint: #c8c8c8;
+    --fill-light: #ececec;
+    --fill-mid: #d8d8d8;
+    --fill-dark: #b8b8b8;
+    --accent-red: #d94545;
+    --accent-green: #4a9d5f;
+    --accent-blue: #3b6ea8;
+    --note: #b8651a;
+    --paper: #fafaf5;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 48px 32px;
+    background: var(--bg);
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(0,0,0,0.08) 1px, transparent 0);
+    background-size: 24px 24px;
+    font-family: 'IBM Plex Sans KR', sans-serif;
+    color: var(--line);
+    font-weight: 400;
+  }
+
+  /* Doc header */
+  .doc-header {
+    max-width: 1280px;
+    margin: 0 auto 48px;
+    padding-bottom: 24px;
+    border-bottom: 2px solid var(--line);
+  }
+  .doc-title {
+    font-size: 32px;
+    font-weight: 600;
+    margin: 0 0 8px;
+    letter-spacing: -0.5px;
+  }
+  .doc-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--line-soft);
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .doc-meta span b { color: var(--line); font-weight: 500; }
+
+  /* Flow indicator */
+  .flow-indicator {
+    max-width: 1280px;
+    margin: 0 auto 48px;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+  .flow-step {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1.5px solid var(--line);
+    background: var(--paper);
+    text-align: center;
+    position: relative;
+  }
+  .flow-step + .flow-step { border-left: none; }
+  .flow-step .step-id { color: var(--note); font-size: 10px; }
+  .flow-step .step-name { font-weight: 500; margin-top: 2px; }
+  .flow-step.is-current { background: var(--line); color: var(--frame-bg); }
+  .flow-step.is-current .step-id { color: #f0a868; }
+  .flow-arrow {
+    font-size: 14px;
+    color: var(--line-soft);
+    padding: 0 4px;
+  }
+
+  /* Screen layout */
+  .screen {
+    max-width: 1280px;
+    margin: 0 auto 80px;
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 32px;
+    align-items: start;
+  }
+  .screen-label {
+    position: sticky;
+    top: 24px;
+    padding: 16px 18px;
+    background: var(--paper);
+    border: 1.5px solid var(--line);
+    border-left: 6px solid var(--line);
+  }
+  .screen-id {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--note);
+    letter-spacing: 0.5px;
+  }
+  .screen-name {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 4px 0 10px;
+    line-height: 1.3;
+  }
+  .screen-desc {
+    font-size: 12px;
+    color: var(--line-soft);
+    line-height: 1.5;
+  }
+  .screen-features {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--line-faint);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--line-soft);
+    line-height: 1.7;
+  }
+
+  /* Frame */
+  .frame {
+    background: var(--frame-bg);
+    border: 2px solid var(--line);
+    aspect-ratio: 16 / 10;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 8px 8px 0 var(--line);
+  }
+  .frame::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 24px;
+    background: var(--fill-light);
+    border-bottom: 1.5px solid var(--line);
+  }
+  .frame::after {
+    content: "● ● ●";
+    position: absolute;
+    top: 4px; left: 10px;
+    font-size: 9px;
+    letter-spacing: 4px;
+    color: var(--line-soft);
+  }
+  .frame-url {
+    position: absolute;
+    top: 4px; left: 50%;
+    transform: translateX(-50%);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--line-soft);
+    background: var(--frame-bg);
+    padding: 0 12px;
+    border-radius: 2px;
+  }
+  .canvas {
+    position: absolute;
+    top: 24px; left: 0; right: 0; bottom: 0;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Common element styles */
+  .label { font-size: 11px; color: var(--line); }
+  .label-mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--line-soft);
+  }
+  .label-tiny {
+    font-size: 9px;
+    color: var(--line-soft);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .btn {
+    border: 1.5px solid var(--line);
+    padding: 6px 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 500;
+    background: var(--frame-bg);
+  }
+  .btn-primary { background: var(--line); color: var(--frame-bg); }
+
+  /* Page header (sub-pages) */
+  .page-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 10px;
+    margin-bottom: 12px;
+    border-bottom: 1.5px solid var(--line);
+  }
+  .back-btn {
+    width: 24px; height: 24px;
+    border: 1.5px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+  }
+  .page-title { font-size: 16px; font-weight: 600; }
+  .page-spacer { flex: 1; }
+
+  /* Callouts */
+  .frame-wrap { position: relative; }
+  .callouts {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--note);
+  }
+  .callout {
+    border-left: 2px solid var(--note);
+    padding: 4px 10px;
+    background: var(--paper);
+    line-height: 1.5;
+  }
+  .callout b { color: var(--line); font-weight: 600; }
+
+  /* Divider */
+  .section-divider {
+    max-width: 1280px;
+    margin: 0 auto 48px;
+    border: none;
+    border-top: 1px dashed var(--line-faint);
+  }
+
+  /* ════════════════════════════════════════════ */
+  /* SCR-10 당일 운동 종합 피드백                  */
+  /* ════════════════════════════════════════════ */
+
+  .summary-layout {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1.3fr;
+    gap: 16px;
+    min-height: 0;
+  }
+
+  .summary-col-left {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+  }
+  .summary-col-right {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+  }
+
+  /* ① Total Score */
+  .total-score-block {
+    border: 2px solid var(--line);
+    background: var(--paper);
+    padding: 14px 16px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .total-score-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 10px;
+  }
+  .total-score-label {
+    font-size: 10px;
+    color: var(--line-soft);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.5px;
+  }
+  .total-score-value {
+    font-size: 44px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1;
+    margin: 2px 0;
+  }
+  .total-score-max { font-size: 14px; color: var(--line-soft); }
+  .total-score-sub {
+    margin-top: 6px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--line-faint);
+    font-size: 10px;
+    color: var(--line-soft);
+    font-family: 'JetBrains Mono', monospace;
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+  }
+  .total-score-sub b { color: var(--line); font-weight: 600; }
+
+  /* ② 세트 별 score 그래프 */
+  .set-graph-block {
+    border: 1.5px solid var(--line);
+    background: var(--frame-bg);
+    padding: 12px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .set-graph-block h4 {
+    margin: 0 0 10px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .set-graph-block h4 .label-tiny { font-weight: 400; }
+  .bar-chart {
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    padding: 4px 4px 0;
+    border-bottom: 1.5px solid var(--line);
+    position: relative;
+  }
+  .bar-chart::before {
+    /* 80점 기준선 */
+    content: "";
+    position: absolute;
+    left: 0; right: 0;
+    bottom: 20%;
+    border-top: 1px dashed var(--accent-green);
+    opacity: 0.6;
+  }
+  .bar-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    height: 100%;
+    gap: 6px;
+  }
+  .bar-val {
+    font-size: 10px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .bar {
+    width: 60%;
+    background: var(--fill-mid);
+    border: 1.5px solid var(--line);
+    border-bottom: none;
+  }
+  .bar.best { background: var(--accent-green); border-color: var(--accent-green); }
+  .bar.worst { background: var(--accent-red); border-color: var(--accent-red); opacity: 0.85; }
+  .bar-x-label {
+    font-size: 9px;
+    color: var(--line-soft);
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 4px;
+  }
+  .graph-legend {
+    margin-top: 8px;
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    font-size: 9px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--line-soft);
+  }
+  .legend-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border: 1px solid var(--line);
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+
+  /* ③ 운동 종합 평가 summary */
+  .summary-eval-block {
+    border: 1.5px solid var(--line);
+    background: var(--frame-bg);
+    padding: 12px;
+    flex-shrink: 0;
+  }
+  .summary-eval-block h4 {
+    margin: 0 0 8px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .summary-eval-block h4::before {
+    content: "AI";
+    background: var(--line);
+    color: var(--frame-bg);
+    font-size: 9px;
+    padding: 2px 5px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .summary-eval-text {
+    font-size: 11.5px;
+    line-height: 1.6;
+  }
+  .summary-tags {
+    margin-top: 10px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .summary-tag {
+    border: 1.5px solid var(--line);
+    font-size: 9px;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 3px 8px;
+    background: var(--paper);
+  }
+  .summary-tag.warn { border-color: var(--note); color: var(--note); }
+  .summary-tag.good { border-color: var(--accent-green); color: var(--accent-green); }
+
+  /* ④ 운동 종합 평가 상세 coaching */
+  .coaching-block {
+    flex: 1;
+    border: 1.5px solid var(--line);
+    background: var(--frame-bg);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .coaching-block h4 {
+    margin: 0 0 8px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .coaching-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-right: 2px;
+  }
+  .coaching-item {
+    border: 1px solid var(--line-faint);
+    border-left: 3px solid var(--line);
+    padding: 8px 10px;
+    background: var(--paper);
+  }
+  .coaching-item.priority { border-left-color: var(--accent-red); }
+  .coaching-item-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .coaching-item-tag {
+    font-size: 9px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    color: var(--note);
+  }
+  .coaching-item.priority .coaching-item-tag { color: var(--accent-red); }
+  .coaching-item-set {
+    font-size: 9px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--line-soft);
+  }
+  .coaching-item-text {
+    font-size: 11px;
+    line-height: 1.55;
+  }
+  .coaching-scroll-hint {
+    text-align: center;
+    margin-top: 6px;
+    color: var(--line-soft);
+  }
+
+  /* 하단 종료 버튼 영역 */
+  .footer-actions {
+    margin-top: 12px;
+    flex-shrink: 0;
+  }
+  .end-btn {
+    width: 100%;
+    padding: 13px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ─────────────────── DOC HEADER ─────────────────── -->
+<div class="doc-header">
+  <h1 class="doc-title">포즈핏 (PoseFit) — 당일 운동 종합 피드백 SCR-10</h1>
+  <div class="doc-meta">
+    <span><b>FILE</b> posefit_daily_summary.html</span>
+    <span><b>DATE</b> 2026-06-22</span>
+    <span><b>SCREEN</b> SCR-10 (SCR-09 "종료" 클릭 시 진입)</span>
+    <span><b>BASIS</b> 요구사항정의서 v1.0 / posefit_workout.html 확장</span>
+  </div>
+</div>
+
+<!-- ─────────────────── FLOW INDICATOR ─────────────────── -->
+<div class="flow-indicator">
+  <div class="flow-step">
+    <div class="step-id">SCR-08</div>
+    <div class="step-name">운동 실행</div>
+  </div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">
+    <div class="step-id">SCR-09</div>
+    <div class="step-name">운동 결과 (세트별)</div>
+  </div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">
+    <div class="step-id">SCR-09</div>
+    <div class="step-name">"종료" 선택</div>
+  </div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step is-current">
+    <div class="step-id">SCR-10</div>
+    <div class="step-name">당일 운동 종합 피드백</div>
+  </div>
+</div>
+
+<!-- ============================================== -->
+<!-- SCR-10 당일 운동 종합 피드백                    -->
+<!-- ============================================== -->
+<section class="screen scr10">
+  <aside class="screen-label">
+    <div class="screen-id">SCR-10</div>
+    <div class="screen-name">당일 운동 종합 피드백</div>
+    <div class="screen-desc">
+      SCR-09에서 "종료" 선택 시 진입. 당일 같은 운동 종목으로 수행한 모든 세트의 결과를 합산하여 1개 화면으로 종합 제공.
+    </div>
+    <div class="screen-features">
+      EX-13 Total Score 산출<br>
+      (당일 세트 평균/가중)<br>
+      EX-14 세트별 score 그래프<br>
+      EX-15 종합 평가 summary<br>
+      EX-16 종합 평가 상세 coaching<br>
+      EX-17 종료 (홈/대시보드 이동)<br>
+      ※ 본 화면은 진입 후<br>
+      　추가 액션 없이 종료만 가능
+    </div>
+  </aside>
+  <div class="frame-wrap">
+    <div class="frame">
+      <div class="frame-url">posefit.app / workout / daily-summary</div>
+      <div class="canvas">
+        <div class="page-header">
+          <div class="back-btn">←</div>
+          <div class="page-title">오늘의 런지 운동 종합 피드백</div>
+          <div class="page-spacer"></div>
+          <span class="label-tiny">2026-06-22 · 총 3세트 · 24회</span>
+        </div>
+
+        <div class="summary-layout">
+
+          <!-- LEFT COLUMN: Total Score + 세트별 그래프 -->
+          <div class="summary-col-left">
+
+            <!-- ① Total Score -->
+            <div class="total-score-block">
+              <div class="total-score-top">
+                <span class="total-score-label">TOTAL&nbsp;SCORE</span>
+              </div>
+              <div class="total-score-value">88<span class="total-score-max">/100</span></div>
+              <div class="total-score-sub">
+                <span>최고 <b>94점</b> (2세트)</span>
+                <span>최저 <b>79점</b> (3세트)</span>
+              </div>
+            </div>
+
+            <!-- ② 세트 별 score 그래프 -->
+            <div class="set-graph-block">
+              <h4>세트별 SCORE <span class="label-tiny">3 SETS</span></h4>
+              <div class="bar-chart">
+                <div class="bar-col">
+                  <span class="bar-val">91</span>
+                  <div class="bar" style="height:78%;"></div>
+                  <span class="bar-x-label">1세트<br>8회</span>
+                </div>
+                <div class="bar-col">
+                  <span class="bar-val">94</span>
+                  <div class="bar best" style="height:86%;"></div>
+                  <span class="bar-x-label">2세트<br>8회</span>
+                </div>
+                <div class="bar-col">
+                  <span class="bar-val">79</span>
+                  <div class="bar worst" style="height:58%;"></div>
+                  <span class="bar-x-label">3세트<br>8회</span>
+                </div>
+              </div>
+              <div class="graph-legend">
+                <span><span class="legend-dot" style="background:var(--accent-green); border-color:var(--accent-green);"></span>최고 세트</span>
+                <span><span class="legend-dot" style="background:var(--accent-red); border-color:var(--accent-red);"></span>최저 세트</span>
+                <span>- - - 목표선(80점)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT COLUMN: 종합 평가 summary + 상세 coaching -->
+          <div class="summary-col-right">
+
+            <!-- ③ 운동 종합 평가 summary -->
+            <div class="summary-eval-block">
+              <h4>종합 평가 SUMMARY</h4>
+              <div class="summary-eval-text">
+                오늘 런지 3세트 모두 정답 동작과 평균 89% 일치했습니다. 세트가 진행될수록 무릎 정렬이 흔들리는 경향이 있었으니, 다음 세트 전 휴식을 조금 더 가져가는 것을 권장합니다.
+              </div>
+              <div class="summary-tags">
+                <span class="summary-tag good">상체 안정성 우수</span>
+                <span class="summary-tag warn">3세트 무릎 정렬 주의</span>
+                <span class="summary-tag warn">세트 후반 피로 누적</span>
+              </div>
+            </div>
+
+            <!-- ④ 운동 종합 평가 상세 coaching -->
+            <div class="coaching-block">
+              <h4>종합 평가 상세 COACHING <span class="label-tiny">스크롤 가능</span></h4>
+              <div class="coaching-list">
+                <div class="coaching-item">
+                  <div class="coaching-item-head">
+                    <span class="coaching-item-tag">▸ 자세 안정성</span>
+                    <span class="coaching-item-set">1~2세트</span>
+                  </div>
+                  <div class="coaching-item-text">
+                    1~2세트에서는 상체가 곧게 유지되어 자세가 매우 안정적이었습니다. 이 자세를 그대로 유지해주세요.
+                  </div>
+                </div>
+                <div class="coaching-item priority">
+                  <div class="coaching-item-head">
+                    <span class="coaching-item-tag">⚠ 무릎 정렬</span>
+                    <span class="coaching-item-set">3세트 · 5~7회차</span>
+                  </div>
+                  <div class="coaching-item-text">
+                    3세트 5~7회차에서 앞 무릎이 발끝보다 평균 6cm 앞으로 나왔습니다. 무게중심을 뒤꿈치 쪽으로 옮기는 연습이 필요합니다.
+                  </div>
+                </div>
+                <div class="coaching-item">
+                  <div class="coaching-item-head">
+                    <span class="coaching-item-tag">▸ 상체 기울기</span>
+                    <span class="coaching-item-set">전체 세트</span>
+                  </div>
+                  <div class="coaching-item-text">
+                    세트 평균 상체 기울기는 9°로 정답 영상(권장 5° 이하) 대비 다소 컸습니다. 하강 시 가슴을 살짝 들어 상체를 세워보세요.
+                  </div>
+                </div>
+                <div class="coaching-item">
+                  <div class="coaching-item-head">
+                    <span class="coaching-item-tag">▸ 피로도 패턴</span>
+                    <span class="coaching-item-set">세트 간 비교</span>
+                  </div>
+                  <div class="coaching-item-text">
+                    세트가 진행될수록 점수가 하락하는 패턴(91→94→79)이 보입니다. 2세트와 3세트 사이 휴식 시간을 30초 이상 늘려보는 것을 권장합니다.
+                  </div>
+                </div>
+                <div class="coaching-item">
+                  <div class="coaching-item-head">
+                    <span class="coaching-item-tag">▸ 종합 코멘트</span>
+                    <span class="coaching-item-set">오늘 전체</span>
+                  </div>
+                  <div class="coaching-item-text">
+                    전반적으로 정답 동작과 평균 89% 일치하는 좋은 수행이었습니다. 무릎 정렬과 휴식 관리만 보완하면 다음에는 90점대 후반도 가능합니다.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 종료 버튼 (유일한 액션) -->
+        <div class="footer-actions">
+          <div class="btn btn-primary end-btn">종료</div>
+        </div>
+      </div>
+    </div>
+    <div class="callouts">
+      <div class="callout"><b>진입조건</b> SCR-09(운동 결과)에서 "종료" 클릭 시, 당일 동일 운동 종목의 모든 세트 결과를 취합해 본 화면으로 진입.</div>
+      <div class="callout"><b>EX-13</b> Total Score는 당일 세트별 score의 평균(또는 가중 평균)으로 산출. 산출 기준은 EX-09와 동일 로직 재사용.</div>
+      <div class="callout"><b>EX-14</b> 세트별 score 그래프: 최고/최저 세트 시각적 강조, 목표선(예: 80점) 표시로 추이 파악 용이하게.</div>
+      <div class="callout"><b>EX-15~16</b> Summary는 1~2줄 핵심 요약 + 태그, 상세 coaching은 세트/회차 단위로 구체적 피드백을 리스트로 제공.</div>
+      <div class="callout"><b>UI</b> 본 화면은 별도 네비게이션 없이 "종료" 버튼만 제공 — 클릭 시 홈/대시보드로 이동 (이동 화면은 별도 정의).</div>
+      <div class="callout"><b>제약</b> 코칭 리스트가 길어질 경우 영역 내 스크롤 처리, 화면 전체 레이아웃은 고정.</div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

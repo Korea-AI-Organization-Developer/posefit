@@ -1,0 +1,121 @@
+<h2 class="sr-only">플랭크 실시간 분석 화면 전체를 재구성한 목업. 왼쪽은 카메라 영상 영역, 오른쪽은 세트 정보와 재구성된 피드백 패널</h2>
+<div style="background: var(--color-background-secondary); border-radius: var(--border-radius-lg); padding: 1.25rem;">
+
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <i class="ti ti-arrow-left" style="font-size:18px;" aria-hidden="true"></i>
+      <span style="font-size:16px; font-weight:500;">플랭크 · 실시간 분석</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--color-text-secondary);">
+      <span style="width:8px; height:8px; border-radius:50%; background:var(--color-text-success); display:inline-block;"></span>
+      카메라 연결됨
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns: 1.6fr 1fr; gap:16px; align-items:start;">
+
+    <div style="background:#0a0a0a; border-radius:var(--border-radius-lg); aspect-ratio: 16/11; display:flex; align-items:flex-end; justify-content:center; padding-bottom:24px;">
+      <span style="color:rgba(255,255,255,0.7); font-size:13px;">START를 누르면 5초 카운트다운 후 녹화가 시작돼요.</span>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:12px;">
+
+      <div style="background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); padding:1rem 1.25rem;">
+        <p style="font-size:12px; color:var(--color-text-secondary); margin:0 0 4px;">현재 세트</p>
+        <p style="font-size:22px; font-weight:500; margin:0;">세트 3</p>
+      </div>
+
+      <div>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+          <span style="font-size:13px; color:var(--color-text-secondary);">2 세트 피드백</span>
+          <span style="font-size:11px; background:var(--color-background-warning); color:var(--color-text-warning); padding:2px 8px; border-radius:var(--border-radius-md); font-weight:500;">교정 필요</span>
+        </div>
+
+        <div style="background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); padding:0.9rem 1.1rem; margin-bottom:10px;">
+          <p style="font-size:13px; margin:0 0 10px; line-height:1.6;">28.3초 중 <span style="font-weight:500;">17초(약 60%)</span>가 자세 오류 구간이었어요. 어깨가 가장 자주 무너졌습니다.</p>
+          <div style="display:flex; height:9px; border-radius:6px; overflow:hidden; margin-bottom:5px;">
+            <div style="flex:4; background:var(--color-background-danger);"></div>
+            <div style="flex:4; background:var(--color-background-success);"></div>
+            <div style="flex:4; background:var(--color-background-danger);"></div>
+            <div style="flex:9; background:var(--color-background-danger);"></div>
+            <div style="flex:4.3; background:var(--color-background-danger);"></div>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--color-text-tertiary);">
+            <span>0초</span>
+            <span>28.3초</span>
+          </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:6px;">
+
+          <div style="background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-left:3px solid var(--color-border-danger); border-radius:0 var(--border-radius-md) var(--border-radius-md) 0; padding:8px 10px; display:flex; gap:8px; align-items:flex-start;">
+            <i class="ti ti-alert-triangle" style="font-size:16px; color:var(--color-text-danger); margin-top:1px;" aria-hidden="true"></i>
+            <div>
+              <p style="font-size:12px; font-weight:500; margin:0 0 1px;">0–4초</p>
+              <p style="font-size:12px; color:var(--color-text-secondary); margin:0;">골반 처짐, 어깨 무너짐, 팔꿈치·시선 오류</p>
+            </div>
+          </div>
+
+          <div style="background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-left:3px solid var(--color-border-success); border-radius:0 var(--border-radius-md) var(--border-radius-md) 0; padding:8px 10px; display:flex; gap:8px; align-items:flex-start;">
+            <i class="ti ti-check" style="font-size:16px; color:var(--color-text-success); margin-top:1px;" aria-hidden="true"></i>
+            <div>
+              <p style="font-size:12px; font-weight:500; margin:0 0 1px;">4–8초</p>
+              <p style="font-size:12px; color:var(--color-text-secondary); margin:0;">안정적인 자세 유지</p>
+            </div>
+          </div>
+
+          <div style="background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-left:3px solid var(--color-border-danger); border-radius:0 var(--border-radius-md) var(--border-radius-md) 0; padding:8px 10px; display:flex; gap:8px; align-items:flex-start;">
+            <i class="ti ti-alert-triangle" style="font-size:16px; color:var(--color-text-danger); margin-top:1px;" aria-hidden="true"></i>
+            <div>
+              <p style="font-size:12px; font-weight:500; margin:0 0 1px;">9–13초</p>
+              <p style="font-size:12px; color:var(--color-text-secondary); margin:0;">어깨 무너짐, 목 떨어짐</p>
+            </div>
+          </div>
+
+          <div id="extra-card" style="display:none; background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-left:3px solid var(--color-border-danger); border-radius:0 var(--border-radius-md) var(--border-radius-md) 0; padding:8px 10px; display:flex; gap:8px; align-items:flex-start;">
+            <i class="ti ti-alert-triangle" style="font-size:16px; color:var(--color-text-danger); margin-top:1px;" aria-hidden="true"></i>
+            <div>
+              <p style="font-size:12px; font-weight:500; margin:0 0 1px;">14–28.3초</p>
+              <p style="font-size:12px; color:var(--color-text-secondary); margin:0;">골반 솟아오름, 팔꿈치·발목 정렬 지속 무너짐</p>
+            </div>
+          </div>
+
+        </div>
+
+        <button id="toggle-btn" style="width:100%; margin-top:8px; font-size:12px; padding:6px;">
+          <i class="ti ti-chevron-down" style="font-size:13px; vertical-align:-2px; margin-right:4px;" aria-hidden="true"></i>
+          구간 1개 더 보기
+        </button>
+
+        <div style="margin-top:12px; padding-top:10px; border-top:0.5px solid var(--color-border-tertiary);">
+          <p style="font-size:11px; color:var(--color-text-secondary); margin:0 0 6px;">반복된 오류 유형</p>
+          <div style="display:flex; gap:5px; flex-wrap:wrap;">
+            <span style="font-size:11px; background:var(--color-background-danger); color:var(--color-text-danger); padding:2px 8px; border-radius:999px;">어깨 무너짐 · 3회</span>
+            <span style="font-size:11px; background:var(--color-background-danger); color:var(--color-text-danger); padding:2px 8px; border-radius:999px;">골반 정렬 · 2회</span>
+            <span style="font-size:11px; background:var(--color-background-danger); color:var(--color-text-danger); padding:2px 8px; border-radius:999px;">팔꿈치 정렬 · 3회</span>
+          </div>
+        </div>
+      </div>
+
+      <button style="width:100%; background:var(--color-text-success); color:white; border:none; padding:12px; border-radius:var(--border-radius-lg); font-size:14px; font-weight:500; display:flex; align-items:center; justify-content:center; gap:6px;">
+        <i class="ti ti-player-play" style="font-size:16px;" aria-hidden="true"></i>
+        다음 세트
+      </button>
+      <button style="width:100%; padding:10px; font-size:13px;">운동 마치기 (2세트)</button>
+      <p style="font-size:11px; color:var(--color-text-tertiary); text-align:center; margin:0;">다음 세트를 하거나, 운동을 마치고 종합 피드백을 받아요</p>
+
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('toggle-btn').addEventListener('click', function() {
+  var extra = document.getElementById('extra-card');
+  var btn = document.getElementById('toggle-btn');
+  var isHidden = extra.style.display === 'none';
+  extra.style.display = isHidden ? 'flex' : 'none';
+  btn.innerHTML = isHidden
+    ? '<i class="ti ti-chevron-up" style="font-size:13px; vertical-align:-2px; margin-right:4px;" aria-hidden="true"></i>구간 접기'
+    : '<i class="ti ti-chevron-down" style="font-size:13px; vertical-align:-2px; margin-right:4px;" aria-hidden="true"></i>구간 1개 더 보기';
+});
+</script>
