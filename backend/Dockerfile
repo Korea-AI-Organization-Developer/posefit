@@ -39,6 +39,7 @@ RUN uv sync --frozen --no-install-project --no-dev
 # 앱 소스 복사 후 최종 동기화
 COPY . .
 RUN uv sync --frozen --no-dev \
+    && sed -i 's/\r$//' docker-entrypoint.sh \
     && chmod +x docker-entrypoint.sh
 
 EXPOSE 8000
