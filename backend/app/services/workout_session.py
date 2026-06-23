@@ -8,13 +8,13 @@ from pathlib import Path
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ai.llm.langgraph_V2 import posefit_graph
+from ai.llm.langgraph_V2 import _answer_payload_from_final_feedback, posefit_graph
 from ai.pose.mediapipe_estimatorV2 import vision
 from app.models.enums import SessionStatus
 from app.repositories.exercise import ExerciseRepository
 from app.repositories.feedback import FeedbackRepository
 from app.repositories.workout_session import WorkoutSessionRepository
-from app.schemas.feedback import FeedbackRead
+from app.schemas.feedback import FeedbackRead, FeedbackTimelineItem
 from app.schemas.workout import StopSessionResponse
 from app.schemas.workout_session import WorkoutSessionCreateRequest, WorkoutSessionRead
 
@@ -123,17 +123,39 @@ class WorkoutSessionService:
             "rule_config_path": rule_config_path,
         }
         result = await asyncio.to_thread(posefit_graph.invoke, state)
-        comment = result.get("final_feedback", {}).get("feedback_text", {}).get("coaching", "")
+        final_fb = result.get("final_feedback", {})
+
+        # coaching 텍스트만 DB에 저장 (summary·timeline은 응답 전용)
+        comment = final_fb.get("feedback_text", {}).get("coaching", "")
         feedback = await self.feedback_repo.create(session_id=session.id, content=comment)
         await self.db.commit()
         # created_at(서버 기본값)·확정 값을 채우기 위해 다시 읽어온다.
         await self.db.refresh(feedback)
 
+        # LangGraph 추가 출력 추출 — DB 미저장, 이번 응답에만 포함
+        payload = _answer_payload_from_final_feedback(final_fb)
+        summary_text = payload.get("summary") or None
+        raw_timeline = payload.get("timestamp") or []
+        timeline_items = [
+            FeedbackTimelineItem(
+                timestamp=item["time"],       # LangGraph: time → 구간 시각 레이블
+                comment=item["coaching"],     # LangGraph: coaching → 구간 설명
+                is_good=bool(item["pose"]),   # LangGraph: pose → True=정상, False=오류
+            )
+            for item in raw_timeline
+            if isinstance(item, dict) and item.get("time")
+        ] or None
+
+        feedback_read = FeedbackRead.model_validate(feedback).model_copy(update={
+            "summary": summary_text,
+            "timeline": timeline_items,
+        })
+
         return StopSessionResponse(
             session_id=session.id,
             video_url=video_url,
             score=float(session.score) if session.score is not None else None,
-            feedback=FeedbackRead.model_validate(feedback),
+            feedback=feedback_read,
         )
 
     async def _save_pose_analysis(
