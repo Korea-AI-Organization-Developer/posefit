@@ -134,6 +134,7 @@ class FeedbackState(TypedDict, total=False):
     final_feedback: Dict[str, Any]
     rule_config_path: str
     analysis_output_path: str
+    exercise_id: Optional[int]
 
     # =========================================================
     # 10. Error Handler
@@ -1526,6 +1527,7 @@ def pose_decide_node(state:FeedbackState) -> dict:
 # =========================================================
 
 CHROMA_PATH = os.path.join(os.path.dirname(__file__), "../rag/.chroma")
+CHROMA_OHP_PATH = os.path.join(os.path.dirname(__file__), "../rag/.chroma/overhead_press")
 CHROMA_COLLECTION = "posefit_coaching"
 
 # variant 우선순위 — 가장 코칭에 직접 쓸 수 있는 섹션
@@ -1549,8 +1551,9 @@ def _view_to_kr(camera_view: str) -> str:
 def _retrieve_coaching_docs(
     errors: List[Dict[str, Any]],
     camera_view: str,
+    chroma_path: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    client = chromadb.PersistentClient(path=CHROMA_PATH)
+    client = chromadb.PersistentClient(path=chroma_path or CHROMA_PATH)
     collection = client.get_collection(CHROMA_COLLECTION)
 
     view_kr = _view_to_kr(camera_view)
@@ -2152,10 +2155,14 @@ def coaching_generator_node(state: FeedbackState) -> dict:
     analysis_result = state.get("analysis_result") or {}
     exercise = str(state.get("exercise") or "운동")
     camera_view = str(state.get("camera_view") or "")
+    exercise_id = state.get("exercise_id")
+
+    chroma_path = CHROMA_OHP_PATH if exercise_id == 4 else None
 
     retrieved_docs = _retrieve_coaching_docs(
         errors=analysis_result.get("errors", []),
         camera_view=camera_view,
+        chroma_path=chroma_path,
     )
 
     set_feedback = _generate_set_feedback(

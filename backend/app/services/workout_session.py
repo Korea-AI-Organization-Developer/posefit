@@ -108,7 +108,7 @@ class WorkoutSessionService:
         elif exercise_id == 3:
             rule_config_path = "ai/llm/config/pushup_rule_config_mediapipe.json"
         elif exercise_id == 4:
-            rule_config_path = "ai/llm/config/oop_rule_config_mediapipe.json"
+            rule_config_path = "ai/llm/config/ohp_rule_config_mediapipe.json"
         else:
             rule_config_path = ""
 
@@ -121,6 +121,7 @@ class WorkoutSessionService:
             "exercise": exercise_name,
             "camera_view": "측면",
             "rule_config_path": rule_config_path,
+            "exercise_id": exercise_id,
         }
         result = await asyncio.to_thread(posefit_graph.invoke, state)
         comment = result.get("final_feedback", {}).get("feedback_text", {}).get("coaching", "")
