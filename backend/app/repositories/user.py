@@ -117,14 +117,12 @@ class UserRepository:
         user_id: int,
         tos: bool,
         privacy: bool,
-        biometric: bool,
         marketing: bool,
     ) -> Agreement:
         agreement = Agreement(
             user_id=user_id,
             tos_agreed=tos,
             privacy_agreed=privacy,
-            biometric_agreed=biometric,
             marketing_agreed=marketing,
         )
         self.db.add(agreement)
