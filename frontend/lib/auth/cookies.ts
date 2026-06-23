@@ -11,7 +11,13 @@ export const STATE_COOKIE = "oauth_state";
 /** refresh 토큰 수명(초) — 백엔드 14일과 맞춘다 */
 export const REFRESH_MAX_AGE = 60 * 60 * 24 * 14;
 
-const isProd = process.env.NODE_ENV === "production";
+// secure 쿠키 여부 — TLS(HTTPS) 환경에서만 true.
+// HTTP(비TLS)로 포트 접근하는 배포에서는 COOKIE_SECURE=false 로 두어야 로그인 쿠키가 동작한다.
+// 미설정 시 NODE_ENV 기준(개발=false, 운영=true).
+const secureCookie =
+  process.env.COOKIE_SECURE !== undefined
+    ? process.env.COOKIE_SECURE === "true"
+    : process.env.NODE_ENV === "production";
 
 interface CookieOptions {
   httpOnly: boolean;
@@ -23,14 +29,14 @@ interface CookieOptions {
 
 /** access 쿠키 — maxAge를 토큰 만료(초)와 맞춰, 만료 시 브라우저가 자동 폐기 → proxy가 refresh 트리거 */
 export function accessCookieOptions(maxAge: number): CookieOptions {
-  return { httpOnly: true, sameSite: "lax", secure: isProd, path: "/", maxAge };
+  return { httpOnly: true, sameSite: "lax", secure: secureCookie, path: "/", maxAge };
 }
 
 export function refreshCookieOptions(): CookieOptions {
   return {
     httpOnly: true,
     sameSite: "lax",
-    secure: isProd,
+    secure: secureCookie,
     path: "/",
     maxAge: REFRESH_MAX_AGE,
   };

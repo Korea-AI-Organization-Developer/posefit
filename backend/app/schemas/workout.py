@@ -1,4 +1,5 @@
 from app.schemas.base import CamelModel
+from app.schemas.feedback import FeedbackRead
 
 
 class FaceGateStatusResponse(CamelModel):
@@ -7,11 +8,15 @@ class FaceGateStatusResponse(CamelModel):
 
 
 class StopSessionResponse(CamelModel):
-    """POST /workout-sessions:stop 응답 — 세션 ID + 저장된 영상 URL + LLM 코멘트."""
+    """POST /workout-sessions:stop 응답 — 세트 1회 결과.
+
+    session_id/video_url 은 프런트가 이번 묶음(bout)의 세션 추적·영상 저장에 쓰고,
+    feedback 은 그 세트의 저장된 LLM 피드백(=하단 세트 카드 표시용)이다.
+    """
     session_id: int
     video_url: str
-    comment: str
     score: float | None = None
+    feedback: FeedbackRead
 
 
 class SaveSessionResponse(CamelModel):

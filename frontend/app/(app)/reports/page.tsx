@@ -3,10 +3,8 @@ import type { Metadata } from "next";
 import { Card, CardBody, CardHeader } from "@/components/ui";
 import { getExercises } from "@/lib/api/exercises";
 import { getReportSummary, getScoreTrend, type ReportPeriod, type TrendDays } from "@/lib/api/reports";
-import { getWorkoutSessions } from "@/lib/mock/workout-sessions";
 import { OverviewDialog } from "./overview-dialog";
 import { QueryTabs } from "./query-tabs";
-import { SavedVideos } from "./saved-videos";
 import { ScoreTrendChart } from "./score-trend-chart";
 import { SummaryCard } from "./summary-card";
 
@@ -30,7 +28,6 @@ const firstParam = (v: string | string[] | undefined): string | undefined =>
  * 서버에서 수행하므로, 백엔드 연동 시 @/lib/mock/* 만 @/lib/api/* 로 바꾸면 된다.
  *   getReportSummary() → GET /api/v1/reports/summary
  *   getScoreTrend()    → GET /api/v1/reports/score-trend
- *   getWorkoutSessions()→ GET /api/v1/workout-sessions?savedOnly=true
  *   getExercises()     → GET /api/v1/exercises
  */
 export default async function ReportsPage({
@@ -56,10 +53,9 @@ export default async function ReportsPage({
     return validIds.has(v) ? v : undefined;
   })();
 
-  const [summary, trend, saved] = await Promise.all([
+  const [summary, trend] = await Promise.all([
     getReportSummary(period, undefined, exerciseId),
     getScoreTrend(days, exerciseId),
-    getWorkoutSessions({ saved: true, exerciseId }),
   ]);
 
   // 현재 필터 — QueryTabs 가 다른 파라미터를 보존하며 URL 을 갱신하도록 함께 넘긴다.
@@ -140,8 +136,6 @@ export default async function ReportsPage({
           </CardBody>
         </Card>
 
-        {/* REP-01 — 저장한 영상 목록 */}
-        <SavedVideos sessions={saved.items} />
       </div>
     </div>
   );

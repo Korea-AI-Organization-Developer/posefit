@@ -68,7 +68,6 @@ export interface Agreement {
   id: number;
   tosAgreed: boolean;
   privacyAgreed: boolean;
-  biometricAgreed: boolean;
   marketingAgreed: boolean;
   agreedAt: string; // date-time
 }
@@ -76,7 +75,6 @@ export interface Agreement {
 export interface AgreementCreateRequest {
   tosAgreed: boolean;
   privacyAgreed: boolean;
-  biometricAgreed: boolean;
   marketingAgreed?: boolean;
 }
 
@@ -120,12 +118,26 @@ export type FeedbackSeverity = "info" | "warning" | "critical";
 
 export type FeedbackSource = "rule" | "llm";
 
+// TODO: 백엔드 미구현 — 시간 구간 피드백 항목. 필드명·구조 확정 전 임시 정의
+export interface FeedbackTimelineItem {
+  // 구간 시각 레이블 (예: "0–4초"). 백엔드 확정 전 임시명
+  timestamp: string;
+  // 구간 설명 텍스트. 백엔드 확정 전 임시명
+  comment: string;
+  // true = 정상 구간(초록), false = 오류 구간(빨강). 백엔드 확정 전 임시명
+  isGood: boolean;
+}
+
 export interface Feedback {
   id: number;
   severity: FeedbackSeverity;
   generatedBy: FeedbackSource;
   content: string;
   createdAt: string;
+  // TODO: 백엔드 미구현 — 종합 요약 텍스트. 없으면 content 로 대체. 필드명 확정 전 임시명
+  summary?: string;
+  // TODO: 백엔드 미구현 — 시간 구간별 피드백 목록. 없으면 구간 UI 미표시. 필드명 확정 전 임시명
+  timeline?: FeedbackTimelineItem[];
 }
 
 // ─── 리포트 ───────────────────────────────────────────────────────────────────
@@ -151,6 +163,8 @@ export interface CalendarDay {
   date: string; // date
   sessionsCount: number;
   avgScore: number | null;
+  /** 해당 날짜 소모 칼로리(kcal) — 캘린더 색상 농도 기준 */
+  calories: number;
 }
 
 export interface CalendarResponse {
@@ -178,10 +192,15 @@ export interface EvaluationMessage {
   text: string;
 }
 
+export type EvaluationSource = "ai" | "rule";
+
 export interface EvaluationResponse {
   period: ReportPeriod;
   exerciseId: number | null;
   messages: EvaluationMessage[];
+  /** AI 평가 시 LLM 이 작성한 2~3문장 종합 요약 (규칙 기반이면 빈 문자열) */
+  summary: string;
+  source: EvaluationSource;
 }
 
 export interface ReportOverview {

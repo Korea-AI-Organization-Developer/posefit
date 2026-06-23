@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Suspense } from "react";
 import { ArrowLeft, Play } from "lucide-react";
 
 import { Card, CardBody, CardHeader } from "@/components/ui";
 import { getExerciseDetail } from "@/lib/api/exercises";
 import { StartButton } from "./start-button";
-import { TodayFeedbacks } from "./today-feedbacks";
 
 export const metadata: Metadata = { title: "정답 영상" };
 
@@ -15,6 +13,22 @@ const TYPE_LABEL: Record<string, string> = {
   dynamic: "동적 · 반복 횟수 측정",
   static: "정적 · 유지 시간 측정",
 };
+
+// youtube.com/watch?v=ID, youtu.be/ID 두 형식 모두 지원
+function toYouTubeEmbedUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    let id: string | null = null;
+    if (parsed.hostname.includes("youtu.be")) {
+      id = parsed.pathname.slice(1);
+    } else if (parsed.hostname.includes("youtube.com")) {
+      id = parsed.searchParams.get("v");
+    }
+    return id ? `https://www.youtube.com/embed/${id}` : null;
+  } catch {
+    return null;
+  }
+}
 
 /*
  * SCR-07 정답(모범) 영상 보기 (EX-02). "운동 시작하기" → createSession 후 실행 화면.
@@ -32,7 +46,7 @@ export default async function ExerciseDetailPage({
     <div className="mx-auto w-full max-w-6xl px-6 py-10">
       <header className="flex items-center gap-3 border-b border-border pb-4">
         <Link
-          href="/workout"
+          href="/exercises"
           aria-label="운동 선택으로"
           className="inline-flex size-9 items-center justify-center rounded-sm text-text-muted transition-colors duration-150 ease-out hover:bg-surface-muted hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-4"
         >
@@ -54,13 +68,15 @@ export default async function ExerciseDetailPage({
       </header>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-        {/* 정답 영상 — 영상이 없으면 poster 플레이스홀더 */}
+        {/* 정답 영상 — YouTube embed, 영상이 없으면 플레이스홀더 */}
         <div className="overflow-hidden rounded-md border border-border bg-surface">
           {exercise.referenceVideoUrl ? (
-            <video
-              controls
-              src={exercise.referenceVideoUrl}
+            <iframe
+              src={toYouTubeEmbedUrl(exercise.referenceVideoUrl) ?? exercise.referenceVideoUrl}
               className="aspect-video w-full bg-black"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              title={`${exercise.nameKo} 정답 영상`}
             />
           ) : (
             <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 bg-surface-muted">
@@ -87,31 +103,31 @@ export default async function ExerciseDetailPage({
 
           <StartButton exerciseId={exercise.id} />
           <p className="text-center text-xs text-text-subtle">
-            시작하면 카메라가 켜지고 얼굴 인식 후 분석이 진행돼요
+            시작하면 카메라가 켜지고 자세 분석이 진행돼요
           </p>
         </div>
       </div>
 
       {/* 오늘(KST) 이 종목에서 받은 피드백 — GET /exercises/{id}/feedbacks */}
-      <div className="mt-6">
+      {/* <div className="mt-6">
         <Suspense fallback={<TodayFeedbacksFallback />}>
           <TodayFeedbacks exerciseId={exercise.id} />
         </Suspense>
-      </div>
+      </div> */}
     </div>
   );
 }
 
 /* 피드백 로딩 중 자리표시 — 카드 골격만 보여준다 */
-function TodayFeedbacksFallback() {
-  return (
-    <Card>
-      <CardHeader>
-        <h2 className="text-sm font-semibold">오늘의 피드백</h2>
-      </CardHeader>
-      <CardBody>
-        <p className="text-sm text-text-subtle">불러오는 중…</p>
-      </CardBody>
-    </Card>
-  );
-}
+// function TodayFeedbacksFallback() {
+//   return (
+//     <Card>
+//       <CardHeader>
+//         <h2 className="text-sm font-semibold">오늘의 피드백</h2>
+//       </CardHeader>
+//       <CardBody>
+//         <p className="text-sm text-text-subtle">불러오는 중…</p>
+//       </CardBody>
+//     </Card>
+//   );
+// }

@@ -11,7 +11,6 @@ from app.repositories.user import UserRepository
 from app.schemas.user import (
     AgreementCreateRequest,
     AgreementRead,
-    FaceRegistrationResponse,
     RegistrationStep,
     SocialAccountRead,
     UserDetailRead,
@@ -41,7 +40,6 @@ class UserService:
             latest_agreement
             and latest_agreement.tos_agreed
             and latest_agreement.privacy_agreed
-            and latest_agreement.biometric_agreed
         )
         if not has_agreement:
             step = RegistrationStep.agreements_required
@@ -88,16 +86,15 @@ class UserService:
     async def submit_agreements(
         self, user_id: int, req: AgreementCreateRequest
     ) -> AgreementRead:
-        if not (req.tos_agreed and req.privacy_agreed and req.biometric_agreed):
+        if not (req.tos_agreed and req.privacy_agreed):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="필수 약관(서비스·개인정보·바이오정보)에 모두 동의해야 합니다 (AGREEMENT_REQUIRED)",
+                detail="필수 약관(서비스·개인정보)에 모두 동의해야 합니다 (AGREEMENT_REQUIRED)",
             )
         agreement = await self.repo.create_agreement(
             user_id,
             req.tos_agreed,
             req.privacy_agreed,
-            req.biometric_agreed,
             req.marketing_agreed,
         )
         await self.db.commit()
@@ -120,51 +117,6 @@ class UserService:
         await self.db.commit()
         await self.db.refresh(detail)
         return UserDetailRead.model_validate(detail)
-
-    async def register_face(
-        self, user_id: int, image_bytes: bytes, *, replace: bool
-    ) -> FaceRegistrationResponse:
-        if not image_bytes:
-            raise HTTPException(status_code=422, detail="이미지가 비어 있습니다")
-
-        existing = await self.repo.get_face(user_id)
-        if existing is not None:
-            if not replace:
-                raise HTTPException(
-                    status_code=409,
-                    detail="이미 얼굴이 등록되어 있습니다 (FACE_ALREADY_REGISTERED). 재등록은 PUT 사용",
-                )
-            await self.repo.delete_face(existing)
-            await self.db.flush()
-
-        try:
-            from ai.face.face_recognizer import extract_encoding, encoding_to_bytes, MODEL_VERSION
-            encoding = extract_encoding(image_bytes)
-        except ImportError:
-            raise HTTPException(status_code=503, detail="얼굴 인식 모듈이 준비되지 않았습니다")
-        except ValueError as e:
-            code = str(e)
-            detail = (
-                "프레임에서 얼굴을 찾을 수 없습니다. 타원 안에 얼굴을 맞춰 주세요."
-                if code == "FACE_NOT_DETECTED"
-                else "얼굴이 두 명 이상 감지됐습니다. 혼자 촬영해 주세요."
-            )
-            raise HTTPException(status_code=422, detail=detail)
-
-        embedding = encoding_to_bytes(encoding)
-        face = await self.repo.create_face(user_id, embedding, MODEL_VERSION)
-        await self.db.commit()
-        await self.db.refresh(face)
-        return FaceRegistrationResponse(
-            registered_at=face.registered_at, model_version=face.model_version
-        )
-
-    async def delete_face(self, user_id: int) -> None:
-        face = await self.repo.get_face(user_id)
-        if face is None:
-            raise HTTPException(status_code=404, detail="등록된 얼굴이 없습니다")
-        await self.repo.delete_face(face)
-        await self.db.commit()
 
     # ─── 소셜 계정 ───
     async def list_social_accounts(self, user_id: int) -> list[SocialAccountRead]:

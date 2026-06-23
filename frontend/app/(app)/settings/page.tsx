@@ -5,14 +5,11 @@ import { Card, CardBody, CardHeader } from "@/components/ui";
 import { ProfileForm } from "@/components/forms/profile-form";
 import { getLatestAgreement } from "@/lib/api/agreements";
 import { getMe } from "@/lib/api/users";
-import { getSocialAccounts } from "@/lib/mock/social-accounts";
-import { getVideosSummary } from "@/lib/mock/videos";
+import { getSocialAccounts } from "@/lib/api/social-accounts";
 import { saveProfileAction } from "./actions";
 import { AccountSection } from "./account-section";
-import { FaceSection } from "./face-section";
 import { MarketingToggle } from "./marketing-toggle";
 import { SocialSection } from "./social-section";
-import { VideosSection } from "./videos-section";
 
 export const metadata: Metadata = { title: "설정" };
 
@@ -44,18 +41,22 @@ function Section({
  * SCR-11 설정 (SET-01~08).
  * 인증/유저 도메인은 실제 API(@/lib/api/*, httpOnly 쿠키 BFF):
  *   getMe() · getLatestAgreement() — 프로필·신체정보·마케팅 동의 현재값
- * 소셜 연동·저장 영상은 백엔드 미구현이라 @/lib/mock/* 사용.
+ * 소셜 연동은 실제 API 사용. 저장 영상은 백엔드 미구현이라 @/lib/mock/* 사용.
  */
-export default async function SettingsPage() {
-  const [me, agreement, social, videos] = await Promise.all([
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const sp = await searchParams;
+  const linked = sp.linked === "1";
+  const linkError = typeof sp.error === "string" ? sp.error : undefined;
+
+  const [me, agreement, social] = await Promise.all([
     getMe(),
     getLatestAgreement(),
     getSocialAccounts(),
-    getVideosSummary(),
   ]);
-
-  // face_embeddings 유무는 registrationStep 으로 파생 (complete = 얼굴 등록됨)
-  const faceRegistered = me.registrationStep === "complete";
 
   return (
     <div className="mx-auto w-full max-w-2xl px-6 py-10">
@@ -96,19 +97,9 @@ export default async function SettingsPage() {
           />
         </Section>
 
-        {/* SET-04·05 — 얼굴 인증 */}
-        <Section title="얼굴 인증">
-          <FaceSection registered={faceRegistered} />
-        </Section>
-
         {/* SET-06 — 연결된 소셜 계정 */}
         <Section title="연결된 계정" description="소셜 로그인 계정을 관리해요.">
-          <SocialSection initial={social} />
-        </Section>
-
-        {/* SET-07 — 저장 영상 */}
-        <Section title="저장 영상" description="저장한 운동 영상을 정리해요.">
-          <VideosSection initial={videos} />
+          <SocialSection initial={social} linked={linked} linkError={linkError} />
         </Section>
 
         {/* SET-08 — 계정 */}

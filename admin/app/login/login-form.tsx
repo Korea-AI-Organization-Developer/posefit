@@ -19,7 +19,7 @@ export function LoginForm() {
           name="email"
           type="email"
           autoComplete="username"
-          placeholder="admin@posefit.dev"
+          placeholder="이메일"
           className="h-10 w-full rounded-sm border border-border bg-surface px-3 text-sm outline-none transition-colors placeholder:text-text-subtle focus:border-accent focus:ring-2 focus:ring-accent-soft"
         />
       </label>
@@ -48,11 +48,6 @@ export function LoginForm() {
         로그인
       </Button>
 
-      <p className="mt-4 rounded-sm bg-surface-muted px-3 py-2 text-xs text-text-subtle">
-        데모 계정: <span className="font-mono">admin@posefit.dev</span> · 비밀번호 아무 값
-        <br />
-        (백엔드 /admin/auth/login 연동 전 mock 인증)
-      </p>
     </form>
   );
 }

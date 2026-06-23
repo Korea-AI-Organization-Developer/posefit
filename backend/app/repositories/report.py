@@ -31,6 +31,53 @@ class ReportRepository:
         )
         return result.all()
 
+    async def get_daily_metrics(
+        self, user_id: int, exercise_id: int | None, start_date: date, end_date: date
+    ) -> list:
+        """장기 추세 계산용. 날짜별 (stat_date, session_count, total_duration_sec, avg_score) 오름차순."""
+        filters = [
+            WorkoutDailyStat.user_id == user_id,
+            WorkoutDailyStat.stat_date >= start_date,
+            WorkoutDailyStat.stat_date <= end_date,
+        ]
+        if exercise_id is not None:
+            filters.append(WorkoutDailyStat.exercise_id == exercise_id)
+
+        result = await self.db.execute(
+            select(
+                WorkoutDailyStat.stat_date,
+                func.sum(WorkoutDailyStat.session_count).label("session_count"),
+                func.sum(WorkoutDailyStat.total_duration_sec).label("total_duration_sec"),
+                func.avg(WorkoutDailyStat.avg_score).label("avg_score"),
+            )
+            .where(*filters)
+            .group_by(WorkoutDailyStat.stat_date)
+            .order_by(WorkoutDailyStat.stat_date)
+        )
+        return result.all()
+
+    async def get_calendar_durations(
+        self, user_id: int, start_date: date, end_date: date
+    ) -> list:
+        """캘린더 칼로리 계산용. 날짜·종목별 (stat_date, name_en, exercise_type, total_duration_sec) 반환."""
+        result = await self.db.execute(
+            select(
+                WorkoutDailyStat.stat_date,
+                Exercise.name_en,
+                Exercise.exercise_type,
+                func.sum(WorkoutDailyStat.total_duration_sec).label("total_duration_sec"),
+            )
+            .join(Exercise, Exercise.id == WorkoutDailyStat.exercise_id)
+            .where(
+                WorkoutDailyStat.user_id == user_id,
+                WorkoutDailyStat.stat_date >= start_date,
+                WorkoutDailyStat.stat_date <= end_date,
+            )
+            .group_by(WorkoutDailyStat.stat_date, Exercise.name_en, Exercise.exercise_type)
+            .order_by(WorkoutDailyStat.stat_date)
+        )
+        return result.all()
+
     async def get_summary(
         self,
         user_id: int,

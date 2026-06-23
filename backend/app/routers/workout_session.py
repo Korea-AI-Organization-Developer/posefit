@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
-from app.schemas.workout import NextSessionResponse, SaveSessionResponse, StopSessionResponse
+from app.schemas.workout import NextSessionResponse, StopSessionResponse
 from app.schemas.workout_session import WorkoutSessionCreateRequest, WorkoutSessionRead
 from app.services.workout_session import WorkoutSessionService
 
@@ -56,26 +56,6 @@ async def stop_workout_session(
         end_at=end_at,
         video=video,
     )
-
-
-@router.post("/{session_id}:save", response_model=SaveSessionResponse)
-async def save_workout_session(
-    session_id: int,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    await WorkoutSessionService(db).save_video(session_id, user.id)
-    return SaveSessionResponse(success=True)
-
-
-@router.post("/{session_id}:discard", response_model=SaveSessionResponse)
-async def discard_workout_session(
-    session_id: int,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    await WorkoutSessionService(db).discard_session(session_id, user.id)
-    return SaveSessionResponse(success=True)
 
 
 @router.post("/{session_id}:next", response_model=NextSessionResponse, status_code=201)

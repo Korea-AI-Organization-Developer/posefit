@@ -1,3 +1,11 @@
+# PoseFit 전체 스택 — db / backend / frontend / admin / nginx
+#
+# 개발용 MySQL만 띄우려면:  docker compose up -d db
+# 전체 배포:                docker compose up -d --build
+#
+# 환경변수는 같은 디렉토리의 .env 에서 읽는다 (.env.production.example 참고).
+# ⚠️ backend 는 mediapipe/torch/dlib(x86_64 휠) 때문에 linux/amd64 로 빌드된다.
+
 services:
   db:
     image: mysql:8.0
@@ -8,10 +16,90 @@ services:
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
-      - "3306:3306"
+      - "13306:3306"   # 호스트 DB 클라이언트 접속용
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     volumes:
       - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./backend
+    platform: linux/amd64
+    container_name: posefit-backend
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      VIDEO_SAVE_BASE: /app/saves
+    ports:
+      - "13008:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - backend_uploads:/app/uploads     # 임시 업로드 영상
+      - backend_saves:/app/saves         # 저장 확정 영상
+      - pose_models:/app/ai/pose/models  # mediapipe .task 캐시(재다운로드 방지)
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://backend:8000/api/v1}
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+    platform: linux/amd64
+    container_name: posefit-frontend
+    environment:
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    ports:
+      - "13000:3000"
+    depends_on:
+      - backend
+
+  admin:
+    build:
+      context: ./admin
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://backend:8000/api/v1}
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+    platform: linux/amd64
+    container_name: posefit-admin
+    environment:
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    ports:
+      - "13001:3001"
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:alpine
+    container_name: posefit-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - admin
 
 volumes:
   mysql_data:
+  backend_uploads:
+  backend_saves:
+  pose_models:
