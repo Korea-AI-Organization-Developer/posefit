@@ -426,14 +426,14 @@ class ReportService:
             return None
         return {"messages": messages, "summary": final.get("summary", "")}
 
-    async def get_overview(self, user_id: int, user_created_at: date) -> ReportOverview:
+    async def get_overview(self, user_id: int, user_created_at: date, exercise_id: int | None = None) -> ReportOverview:
         """누적 요약 + 최근 30일 캘린더 + 최근 90일 점수 추이 + 종합 평가를 조합한다.
 
         같은 AsyncSession 에서는 asyncio.gather 동시 실행이 불가하므로 순차 조회한다.
         (단일 세션=단일 커넥션이라 DB 단에서 어차피 직렬화됨)
         """
-        summary = await self.get_summary(user_id, ReportPeriod.cumulative, None, None, user_created_at)
+        summary = await self.get_summary(user_id, ReportPeriod.cumulative, None, exercise_id, user_created_at)
         calendar = await self.get_calendar(user_id, 30)
-        score_trend = await self.get_score_trend(user_id, 90, None)
-        evaluation = await self.get_evaluation(user_id, ReportPeriod.cumulative, None, user_created_at)
+        score_trend = await self.get_score_trend(user_id, 90, exercise_id)
+        evaluation = await self.get_evaluation(user_id, ReportPeriod.cumulative, exercise_id, user_created_at)
         return ReportOverview(summary=summary, calendar=calendar, score_trend=score_trend, evaluation=evaluation)
