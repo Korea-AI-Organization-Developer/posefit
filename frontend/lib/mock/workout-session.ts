@@ -1,7 +1,7 @@
 /*
  * 운동 세션 라이프사이클 목업 — docs/openapi.yaml 기준. 백엔드 미구현.
  *   createSession() → POST /workout-sessions
- *   startSession()  → POST /workout-sessions/{id}:start   (얼굴 매칭)
+ *   startSession()  → POST /workout-sessions/{id}:start
  *   stopSession()   → POST /workout-sessions/{id}:stop     (점수 + 피드백)
  *   saveSession()   → POST /workout-sessions/{id}:save
  *   getFeedbacks()  → GET  /workout-sessions/{id}/feedbacks
@@ -85,11 +85,7 @@ export async function createSession(exerciseId: number): Promise<WorkoutSession>
   };
 }
 
-/*
- * POST :start — 얼굴 매칭 후 추적 시작.
- * 실제로는 업로드한 프레임을 등록 임베딩과 비교해 미등록/다수 인물/불일치 시 422.
- * 시뮬은 항상 매칭 성공으로 둔다(UI 는 실패 분기도 처리하도록 작성).
- */
+/* POST :start — 포즈 추적 시작. */
 export async function startSession(
   sessionId: number,
 ): Promise<StartSessionResult> {

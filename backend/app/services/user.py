@@ -40,7 +40,6 @@ class UserService:
             latest_agreement
             and latest_agreement.tos_agreed
             and latest_agreement.privacy_agreed
-            and latest_agreement.biometric_agreed
         )
         if not has_agreement:
             step = RegistrationStep.agreements_required
@@ -87,16 +86,15 @@ class UserService:
     async def submit_agreements(
         self, user_id: int, req: AgreementCreateRequest
     ) -> AgreementRead:
-        if not (req.tos_agreed and req.privacy_agreed and req.biometric_agreed):
+        if not (req.tos_agreed and req.privacy_agreed):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="필수 약관(서비스·개인정보·바이오정보)에 모두 동의해야 합니다 (AGREEMENT_REQUIRED)",
+                detail="필수 약관(서비스·개인정보)에 모두 동의해야 합니다 (AGREEMENT_REQUIRED)",
             )
         agreement = await self.repo.create_agreement(
             user_id,
             req.tos_agreed,
             req.privacy_agreed,
-            req.biometric_agreed,
             req.marketing_agreed,
         )
         await self.db.commit()

@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 const STEPS = [
   { href: "/onboarding/terms", label: "약관 동의" },
   { href: "/onboarding/profile", label: "기본 정보" },
-  { href: "/onboarding/face", label: "얼굴 등록" },
 ] as const;
 
 /* 온보딩 진행 표시 — 현재 단계는 pathname으로 판단. 셸 없는 레이아웃 상단에 둔다. */

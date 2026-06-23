@@ -41,10 +41,9 @@ export async function updateMarketingAction(
   try {
     const current = await getLatestAgreement();
     await submitAgreements({
-      // 가입 완료 사용자는 필수 3종이 이미 true — 직전 값을 그대로 승계
+      // 가입 완료 사용자는 필수 약관이 이미 true — 직전 값을 그대로 승계
       tosAgreed: current?.tosAgreed ?? true,
       privacyAgreed: current?.privacyAgreed ?? true,
-      biometricAgreed: current?.biometricAgreed ?? true,
       marketingAgreed: next,
     });
   } catch (e) {

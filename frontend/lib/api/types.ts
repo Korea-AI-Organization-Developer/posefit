@@ -68,7 +68,6 @@ export interface Agreement {
   id: number;
   tosAgreed: boolean;
   privacyAgreed: boolean;
-  biometricAgreed: boolean;
   marketingAgreed: boolean;
   agreedAt: string; // date-time
 }
@@ -76,7 +75,6 @@ export interface Agreement {
 export interface AgreementCreateRequest {
   tosAgreed: boolean;
   privacyAgreed: boolean;
-  biometricAgreed: boolean;
   marketingAgreed?: boolean;
 }
 

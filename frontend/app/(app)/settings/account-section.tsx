@@ -10,7 +10,6 @@ import { withdrawAction } from "./actions";
 const DELETE_ITEMS = [
   "운동 기록·점수·통계",
   "저장한 영상",
-  "얼굴 인증 데이터",
   "프로필·신체 정보",
 ];
 
