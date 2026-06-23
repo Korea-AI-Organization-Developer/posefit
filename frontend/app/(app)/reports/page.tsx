@@ -84,7 +84,7 @@ export default async function ReportsPage({
             운동 기록을 기간·종목별로 돌아봐요
           </p>
         </div>
-        <OverviewDialog />
+        <OverviewDialog exerciseId={exerciseId} />
       </header>
 
       {/* REP-07 — 종목 필터. 요약·차트·목록 전체에 적용된다. */}

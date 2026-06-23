@@ -62,5 +62,6 @@ async def get_evaluation(
 async def get_report_overview(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    exercise_id: int | None = Query(default=None, alias="exerciseId"),
 ):
-    return await ReportService(db).get_overview(user.id, user.created_at.date())
+    return await ReportService(db).get_overview(user.id, user.created_at.date(), exercise_id)

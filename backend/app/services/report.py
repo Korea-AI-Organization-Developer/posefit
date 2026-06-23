@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 from decimal import Decimal
 
+
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,9 +32,8 @@ from app.schemas.report import (
 logger = logging.getLogger(__name__)
 
 # LangGraph 종합 평가 최대 대기(초). 초과 시 규칙 기반으로 폴백한다.
-# thinking_budget=0 적용으로 응답이 3~5초 수준 → 여유 있게 25초.
-# (더 빠른 응답이 필요하면 GEMINI_MODEL 을 gemini-2.5-flash-lite 로 변경: ~3초)
-_AI_EVALUATION_TIMEOUT_SEC = 25
+# 첫 호출 시 chromadb + 그래프 실행 비용이 있어 여유 있게 90초.
+_AI_EVALUATION_TIMEOUT_SEC = 90
 
 # 칼로리 계산용 운동별 MET (kcal = MET × 체중kg × 시간h).
 # workout_calendar.html 의 per-rep 계수를 MET 로 환산한 값.
@@ -280,9 +280,6 @@ class ReportService:
         analysis_results = await WorkoutAnalysisRepository(self.db).list_recent_results(
             user_id, exercise_id, limit=30
         )
-        if not feedback_texts and not analysis_results:
-            logger.warning("[AI평가] feedback_texts와 analysis_results 모두 비어있음 → 통계만으로 AI 평가 시도")
-            # 데이터 없어도 report_stats(세션 수·점수 등)으로 AI 평가 진행. long_term 분기는 report_stats로 라우팅.
 
         # 장기 추세 지표 — 코드가 deterministic 하게 계산(원칙 2: LLM 은 판단 안 함, 서술만).
         daily_metrics = await self.repo.get_daily_metrics(
@@ -301,15 +298,7 @@ class ReportService:
 
         api_key = settings.google_api_key or settings.gemini_api_key
         if not api_key:
-            logger.warning("[AI평가] API 키 없음 → 규칙 기반으로 폴백")
             return None
-
-        logger.warning(
-            "[AI평가] LangGraph 호출 시작: sessions=%d feedback=%d analysis=%d",
-            summary.sessions_count,
-            len(feedback_texts),
-            len(analysis_results),
-        )
 
         try:
             # langgraph_V1 의 통합 그래프(long_term 분기)를 호출한다.

@@ -68,7 +68,7 @@ function CalendarGrid({ days }: { days: ReportOverview["calendar"]["days"] }) {
   );
 }
 
-export function OverviewDialog() {
+export function OverviewDialog({ exerciseId }: { exerciseId?: number }) {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<ReportOverview | null>(null);
   const [loading, setLoading] = useState(false);
@@ -80,7 +80,7 @@ export function OverviewDialog() {
     setLoading(true);
     setError(false);
     try {
-      const result = await fetchReportOverview();
+      const result = await fetchReportOverview(exerciseId);
       setData(result);
     } catch {
       setError(true);

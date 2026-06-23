@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     # 키가 비어 있으면 종합 평가는 규칙 기반으로 폴백한다.
     google_api_key: str = ""
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.0-flash"
+    gemini_model: str = "gemini-2.5-flash"
 
     class Config:
         env_file = ".env"
