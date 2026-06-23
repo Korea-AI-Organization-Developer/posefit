@@ -161,10 +161,10 @@ class WorkoutSessionService:
             "rule_config_path": rule_config_path,
             "exercise_id": exercise_id,
         }
-        result = await asyncio.to_thread(posefit_graph.invoke, state)
+        result: dict = dict(await asyncio.to_thread(posefit_graph.invoke, state))
         final_fb = result.get("final_feedback", {})
 
-        score_pct = final_fb.get("score_summary", {}).get("time_weighted_score_pct")
+        score_pct = result.get("analysis_result", {}).get("score_summary", {}).get("time_weighted_score_pct")
         if score_pct is not None:
             session.score = score_pct
 
