@@ -2456,6 +2456,7 @@ def _long_term_llm(state: FeedbackState):
     if not api_key:
         return None
     model = state.get("model") or os.getenv("GEMINI_MODEL", GEMINI_MODEL)
+    from langchain_google_genai import ChatGoogleGenerativeAI
     try:
         return ChatGoogleGenerativeAI(
             model=model, api_key=api_key, temperature=0.4, thinking_budget=0
@@ -2607,6 +2608,7 @@ def long_term_feedback_node(state:FeedbackState) -> dict:
             summary="", improvement_trend="", long_term_issue="", messages=[]
         )}
 
+    from langchain_core.messages import HumanMessage
     prompt = _build_long_term_prompt(feedback_texts, analysis_results, stats)
     try:
         response = llm.invoke([HumanMessage(content=prompt)])
@@ -2649,6 +2651,7 @@ def _refine_long_term_feedback(fb: Dict[str, Any], llm) -> Dict[str, Any]:
     if llm is None or not draft["messages"]:
         return draft
 
+    from langchain_core.messages import HumanMessage
     prompt = (
         "당신은 운동 코칭 피드백을 다듬는 편집자입니다.\n"
         "아래 종합평가 초안의 '내용'은 그대로 두고, 표현만 더 자연스럽고 따뜻하며\n"
