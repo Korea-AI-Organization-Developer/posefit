@@ -20,7 +20,7 @@ const STEPS = [
   {
     icon: Camera,
     title: "웹캠 앞에서 따라하기",
-    desc: "카메라 앞에서 운동하면 관절 키포인트를 실시간으로 추적해요. 별도 장비는 필요 없어요.",
+    desc: "카메라 앞에서 운동하면 관절 키포인트를 추적해요. 별도 장비는 필요 없어요.",
   },
   {
     icon: Gauge,
@@ -156,7 +156,7 @@ function ProductPreview() {
           <div className="absolute inset-[12%] rounded-md border-2 border-dashed border-accent/60" />
           <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-sm bg-black/70 px-2 py-1 font-mono text-[10px] text-white">
             <span className="size-1.5 rounded-full bg-accent" />
-            실시간 분석 · 17/17
+            분석 · 17/17
           </div>
         </div>
 
