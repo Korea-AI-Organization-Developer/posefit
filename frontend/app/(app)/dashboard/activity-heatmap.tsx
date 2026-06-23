@@ -1,4 +1,4 @@
-import { Card, CardBody, CardHeader } from "@/components/ui";
+﻿import { Card, CardBody, CardHeader } from "@/components/ui";
 import { formatDay } from "@/lib/format";
 import type { CalendarDay } from "@/lib/api/reports";
 
@@ -12,9 +12,9 @@ const LEVEL_COLORS = ["#EDEDEE", "#C8EDE4", "#8DD5C3", "#46BBA2", "#0D9B7B"];
 
 function sessionLevel(count: number): number {
   if (count <= 0) return 0;
-  if (count === 1) return 1;
-  if (count === 2) return 2;
-  if (count === 3) return 3;
+  if (count <= 2) return 1;
+  if (count <= 5) return 2;
+  if (count <= 9) return 3;
   return 4;
 }
 
