@@ -6,12 +6,10 @@ import { ProfileForm } from "@/components/forms/profile-form";
 import { getLatestAgreement } from "@/lib/api/agreements";
 import { getMe } from "@/lib/api/users";
 import { getSocialAccounts } from "@/lib/api/social-accounts";
-import { getVideosSummary } from "@/lib/mock/videos";
 import { saveProfileAction } from "./actions";
 import { AccountSection } from "./account-section";
 import { MarketingToggle } from "./marketing-toggle";
 import { SocialSection } from "./social-section";
-import { VideosSection } from "./videos-section";
 
 export const metadata: Metadata = { title: "설정" };
 
@@ -54,11 +52,10 @@ export default async function SettingsPage({
   const linked = sp.linked === "1";
   const linkError = typeof sp.error === "string" ? sp.error : undefined;
 
-  const [me, agreement, social, videos] = await Promise.all([
+  const [me, agreement, social] = await Promise.all([
     getMe(),
     getLatestAgreement(),
     getSocialAccounts(),
-    getVideosSummary(),
   ]);
 
   return (
@@ -103,11 +100,6 @@ export default async function SettingsPage({
         {/* SET-06 — 연결된 소셜 계정 */}
         <Section title="연결된 계정" description="소셜 로그인 계정을 관리해요.">
           <SocialSection initial={social} linked={linked} linkError={linkError} />
-        </Section>
-
-        {/* SET-07 — 저장 영상 */}
-        <Section title="저장 영상" description="저장한 운동 영상을 정리해요.">
-          <VideosSection initial={videos} />
         </Section>
 
         {/* SET-08 — 계정 */}
