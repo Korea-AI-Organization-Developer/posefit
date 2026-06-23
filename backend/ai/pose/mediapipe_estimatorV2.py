@@ -351,19 +351,15 @@ class MediaPipePoseEstimator:
         vid_out_path   = video_out_dir / "annotated.mp4" if self.save_video else None
 
         cap         = cv2.VideoCapture(str(self.video_path))
-        src_fps     = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        src_fps_raw = cap.get(cv2.CAP_PROP_FPS) or 30.0
         width       = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height      = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total       = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
         # 브라우저 WebRTC(WebM)는 1ms 타임베이스로 OpenCV가 fps=1000으로 잘못 읽음
-        # 실제 fps를 마지막 프레임 타임스탬프로 추정해 보정
-        if src_fps > 120 and total > 1:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, total - 1)
-            last_ts_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            if last_ts_ms > 0:
-                src_fps = max(1.0, min((total - 1) * 1000.0 / last_ts_ms, 120.0))
+        # cap.set() 후 CAP_PROP_POS_MSEC 가 WebM에서 0을 반환해 시킹 방식은 사용 불가
+        # → 30fps 로 하드코딩 보정, 타임스탬프는 루프에서 CAP_PROP_POS_MSEC 직접 읽음
+        src_fps     = 30.0 if src_fps_raw > 120 else src_fps_raw
 
         out_fps     = self.target_fps if self.target_fps is not None else src_fps
         # 원본에서 몇 프레임마다 1프레임을 추출할지 계산
@@ -385,7 +381,7 @@ class MediaPipePoseEstimator:
                 "coordinate_note": "hip_centered, torso_scaled (unitless, original unit: normalized 0~1)",
                 "confidence_thresholds": {"high": VIS_HIGH, "low": VIS_LOW},
             },
-            "source_fps": src_fps,
+            "source_fps": src_fps_raw,
             "output_fps": out_fps,
             "frame_step": frame_step,
             "width": width,
@@ -405,6 +401,8 @@ class MediaPipePoseEstimator:
 
         with PoseLandmarker.create_from_options(options) as landmarker:
             while cap.isOpened():
+                # CAP_PROP_POS_MSEC 는 read() 전에 읽어야 현재 프레임 타임스탬프를 반환
+                container_ts_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
                 ret, frame = cap.read()
                 if not ret:
                     break
@@ -414,7 +412,12 @@ class MediaPipePoseEstimator:
                     src_frame_id += 1
                     continue
 
-                timestamp_ms = int(src_frame_id * 1000 / src_fps)
+                # WebM은 container_ts_ms 가 실제 ms 단위로 정확함
+                # 일반 mp4 등은 src_fps_raw 가 정상이므로 계산값 사용
+                if src_fps_raw > 120:
+                    timestamp_ms = int(container_ts_ms)
+                else:
+                    timestamp_ms = int(src_frame_id * 1000 / src_fps)
 
                 mp_image = mp.Image(
                     image_format=mp.ImageFormat.SRGB,
