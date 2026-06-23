@@ -87,7 +87,7 @@ export default async function ExerciseDetailPage({
 
           <StartButton exerciseId={exercise.id} />
           <p className="text-center text-xs text-text-subtle">
-            시작하면 카메라가 켜지고 얼굴 인식 후 분석이 진행돼요
+            시작하면 카메라가 켜지고 자세 분석이 진행돼요
           </p>
         </div>
       </div>
