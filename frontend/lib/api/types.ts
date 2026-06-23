@@ -76,7 +76,6 @@ export interface Agreement {
 export interface AgreementCreateRequest {
   tosAgreed: boolean;
   privacyAgreed: boolean;
-  biometricAgreed: boolean;
   marketingAgreed?: boolean;
 }
 
