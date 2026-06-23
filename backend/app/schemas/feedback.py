@@ -9,6 +9,16 @@ from app.models.enums import FeedbackSeverity, FeedbackSource
 from app.schemas.base import CamelModel
 
 
+# FeedbackTimelineItem: 구간별 피드백 한 항목.
+# LangGraph _timestamp_items_from_timeline_feedback 출력과 1:1 대응.
+# 필드명은 프론트 FeedbackTimelineItem(types.ts)과 camelCase 기준으로 맞춤.
+# TODO: 필드명 확정 전 임시명 — 프론트 types.ts 의 주석과 함께 변경할 것
+class FeedbackTimelineItem(CamelModel):
+    timestamp: str   # LangGraph: timestamp[].time — 구간 시각 레이블 (예: "0~4초")
+    comment: str     # LangGraph: timestamp[].coaching — 구간 설명 텍스트
+    is_good: bool    # LangGraph: timestamp[].pose — True=정상 구간, False=오류 구간 / JSON: isGood
+
+
 # FeedbackRead: 피드백 한 건의 응답 형식. docs/openapi.yaml 의 Feedback 스키마와 1:1.
 #   generated_by → JSON 에서는 generatedBy, created_at → createdAt 로 자동 변환된다.
 class FeedbackRead(CamelModel):
@@ -17,6 +27,10 @@ class FeedbackRead(CamelModel):
     generated_by: FeedbackSource     # 생성 주체: rule(규칙 기반) / llm(생성형).
     content: str                     # 사용자에게 보여줄 자연어 피드백.
     created_at: datetime             # 생성 시각(UTC).
+    # LangGraph 추가 출력 — DB 미저장, :stop 응답에서만 포함. 없으면 None.
+    # TODO: 필드명 확정 전 임시명 — 프론트 types.ts 의 주석과 함께 변경할 것
+    summary: str | None = None                          # LangGraph: feedback_text.summary
+    timeline: list[FeedbackTimelineItem] | None = None  # LangGraph: feedback_text.timestamp
 
 
 # ExerciseFeedbackSummaryRequest: 운동 종합 피드백 생성 요청 본문.

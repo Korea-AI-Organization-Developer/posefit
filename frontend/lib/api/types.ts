@@ -120,12 +120,26 @@ export type FeedbackSeverity = "info" | "warning" | "critical";
 
 export type FeedbackSource = "rule" | "llm";
 
+// TODO: 백엔드 미구현 — 시간 구간 피드백 항목. 필드명·구조 확정 전 임시 정의
+export interface FeedbackTimelineItem {
+  // 구간 시각 레이블 (예: "0–4초"). 백엔드 확정 전 임시명
+  timestamp: string;
+  // 구간 설명 텍스트. 백엔드 확정 전 임시명
+  comment: string;
+  // true = 정상 구간(초록), false = 오류 구간(빨강). 백엔드 확정 전 임시명
+  isGood: boolean;
+}
+
 export interface Feedback {
   id: number;
   severity: FeedbackSeverity;
   generatedBy: FeedbackSource;
   content: string;
   createdAt: string;
+  // TODO: 백엔드 미구현 — 종합 요약 텍스트. 없으면 content 로 대체. 필드명 확정 전 임시명
+  summary?: string;
+  // TODO: 백엔드 미구현 — 시간 구간별 피드백 목록. 없으면 구간 UI 미표시. 필드명 확정 전 임시명
+  timeline?: FeedbackTimelineItem[];
 }
 
 // ─── 리포트 ───────────────────────────────────────────────────────────────────
