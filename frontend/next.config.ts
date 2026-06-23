@@ -9,6 +9,13 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "lh3.googleusercontent.com" },
     ],
   },
+  experimental: {
+    // 운동 영상 업로드(:stop) 허용 크기 — Pages Router의 config.api.bodyParser는
+    // App Router route handler에서 동작하지 않으므로 여기서 설정
+    serverActions: {
+      bodySizeLimit: "200mb",
+    },
+  },
 };
 
 export default nextConfig;
