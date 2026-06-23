@@ -401,8 +401,6 @@ class MediaPipePoseEstimator:
 
         with PoseLandmarker.create_from_options(options) as landmarker:
             while cap.isOpened():
-                # CAP_PROP_POS_MSEC 는 read() 전에 읽어야 현재 프레임 타임스탬프를 반환
-                container_ts_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
                 ret, frame = cap.read()
                 if not ret:
                     break
@@ -412,12 +410,9 @@ class MediaPipePoseEstimator:
                     src_frame_id += 1
                     continue
 
-                # WebM은 container_ts_ms 가 실제 ms 단위로 정확함
-                # 일반 mp4 등은 src_fps_raw 가 정상이므로 계산값 사용
-                if src_fps_raw > 120:
-                    timestamp_ms = int(container_ts_ms)
-                else:
-                    timestamp_ms = int(src_frame_id * 1000 / src_fps)
+                # out_frame_id 기반 고정 간격 — 단조증가 절대 보장
+                # container_ts_ms / src_frame_id 기반은 WebM 등에서 역전 발생 가능
+                timestamp_ms = int(out_frame_id * 1000.0 / out_fps)
 
                 mp_image = mp.Image(
                     image_format=mp.ImageFormat.SRGB,
