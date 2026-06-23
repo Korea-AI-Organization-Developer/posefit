@@ -14,6 +14,22 @@ const TYPE_LABEL: Record<string, string> = {
   static: "정적 · 유지 시간 측정",
 };
 
+// youtube.com/watch?v=ID, youtu.be/ID 두 형식 모두 지원
+function toYouTubeEmbedUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    let id: string | null = null;
+    if (parsed.hostname.includes("youtu.be")) {
+      id = parsed.pathname.slice(1);
+    } else if (parsed.hostname.includes("youtube.com")) {
+      id = parsed.searchParams.get("v");
+    }
+    return id ? `https://www.youtube.com/embed/${id}` : null;
+  } catch {
+    return null;
+  }
+}
+
 /*
  * SCR-07 정답(모범) 영상 보기 (EX-02). "운동 시작하기" → createSession 후 실행 화면.
  */
@@ -52,13 +68,15 @@ export default async function ExerciseDetailPage({
       </header>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-        {/* 정답 영상 — 영상이 없으면 poster 플레이스홀더 */}
+        {/* 정답 영상 — YouTube embed, 영상이 없으면 플레이스홀더 */}
         <div className="overflow-hidden rounded-md border border-border bg-surface">
           {exercise.referenceVideoUrl ? (
-            <video
-              controls
-              src={exercise.referenceVideoUrl}
+            <iframe
+              src={toYouTubeEmbedUrl(exercise.referenceVideoUrl) ?? exercise.referenceVideoUrl}
               className="aspect-video w-full bg-black"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              title={`${exercise.nameKo} 정답 영상`}
             />
           ) : (
             <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 bg-surface-muted">
