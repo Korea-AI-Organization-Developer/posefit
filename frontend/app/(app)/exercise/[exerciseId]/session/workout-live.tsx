@@ -215,7 +215,7 @@ export function WorkoutLive({
         >
           <ArrowLeft aria-hidden />
         </Link>
-        <h1 className="text-lg font-semibold">{exercise.nameKo} · 실시간 분석</h1>
+        <h1 className="text-lg font-semibold">{exercise.nameKo}</h1>
         <span
           className={cn(
             "ml-auto inline-flex items-center gap-1.5 text-xs",
