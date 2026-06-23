@@ -119,7 +119,7 @@ class WorkoutSessionService:
                                         user_id = user_id,
                                         exercise_id= exercise_id,
                                         start_at=start_at,
-                                        fps= 30  # fps변경 시 이곳을 참조
+                                        fps= 10  # fps변경 시 이곳을 참조 (WebM 보정 후 실제 30fps 영상 기준)
                                     )
         points = vision_result["normalized"]
         json_url = str(vision_result["norm_json_path"])

@@ -355,6 +355,16 @@ class MediaPipePoseEstimator:
         width       = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height      = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total       = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        # 브라우저 WebRTC(WebM)는 1ms 타임베이스로 OpenCV가 fps=1000으로 잘못 읽음
+        # 실제 fps를 마지막 프레임 타임스탬프로 추정해 보정
+        if src_fps > 120 and total > 1:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, total - 1)
+            last_ts_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            if last_ts_ms > 0:
+                src_fps = max(1.0, min((total - 1) * 1000.0 / last_ts_ms, 120.0))
+
         out_fps     = self.target_fps if self.target_fps is not None else src_fps
         # 원본에서 몇 프레임마다 1프레임을 추출할지 계산
         frame_step  = max(1, round(src_fps / out_fps))

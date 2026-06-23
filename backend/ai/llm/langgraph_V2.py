@@ -875,8 +875,12 @@ def _detect_reps_from_frame_features(
         f for f in frame_features
         if isinstance(f, dict) and _is_number(f.get(signal_key))
     ]
-    if len(valid_frames) < 10:
+    n_valid = len(valid_frames)
+    if n_valid < 6:
         return []
+
+    # 유효 프레임이 적을 때 min_rep_frames를 동적으로 축소 (최소 3, 상한 원래 기본값)
+    min_rep_frames = min(min_rep_frames, max(3, n_valid // 4))
 
     values = [float(f[signal_key]) for f in valid_frames]
     n    = len(values)
