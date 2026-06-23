@@ -215,7 +215,7 @@ export function WorkoutLive({
         >
           <ArrowLeft aria-hidden />
         </Link>
-        <h1 className="text-lg font-semibold">{exercise.nameKo} · 실시간 분석</h1>
+        <h1 className="text-lg font-semibold">{exercise.nameKo}</h1>
         <span
           className={cn(
             "ml-auto inline-flex items-center gap-1.5 text-xs",
@@ -318,6 +318,11 @@ export function WorkoutLive({
   );
 }
 
+// "0~7.1" → "0초~7초" (소수점 버림, 각 숫자에 초 붙임)
+function formatTimestamp(raw: string): string {
+  return raw.replace(/[\d.]+/g, (n) => `${Math.round(Number(n))}초`);
+}
+
 /* 가장 최근 세트 1건 — 와이어프레임 plank_fullscreen_redesign.html 기준 */
 function SetLast({ sets, className }: { sets: SetResult[]; className?: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -394,7 +399,7 @@ function SetLast({ sets, className }: { sets: SetResult[]; className?: string })
               )}
               <div>
                 {/* seg.timestamp: 구간 시각 레이블. 백엔드 확정 전 임시 필드명 */}
-                <p className="text-xs font-medium">{seg.timestamp}</p>
+                <p className="text-xs font-medium">{formatTimestamp(seg.timestamp)}</p>
                 {/* seg.comment: 구간 설명 텍스트. 백엔드 확정 전 임시 필드명 */}
                 <p className="text-xs text-text-subtle">{seg.comment}</p>
               </div>

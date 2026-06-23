@@ -29,13 +29,13 @@ export function WorkoutCta({ exercises }: { exercises: ExerciseSummary[] }) {
             정답 영상과 비교하며 자세를 교정해 보세요
           </p>
         </div>
-        <Link
+        {/* <Link
           href="/exercises"
           className={buttonClasses("primary", "lg", "shrink-0")}
         >
           <Play aria-hidden />
           운동 시작하기
-        </Link>
+        </Link> */}
       </div>
 
       <ul className="mt-6 grid flex-1 auto-rows-fr grid-cols-2 gap-3">
