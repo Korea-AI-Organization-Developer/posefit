@@ -268,7 +268,7 @@ def make_users(db: Session) -> tuple[list[User], User]:
             provider_avatar_url=None, created_at=u.created_at, updated_at=u.created_at,
         ))
         db.add(Agreement(
-            user_id=u.id, tos_agreed=True, privacy_agreed=True, biometric_agreed=True,
+            user_id=u.id, tos_agreed=True, privacy_agreed=True, biometric_agreed=False,
             marketing_agreed=random.random() < 0.5, agreed_at=u.created_at,
         ))
         # 탈퇴 유저도 가입은 완료했었다고 보고 detail 부여(registration complete)
