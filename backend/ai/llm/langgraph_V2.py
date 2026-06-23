@@ -38,7 +38,7 @@ _EXERCISE_RULE_CONFIGS: Dict[str, str] = {
     "overhead_press": os.path.join("config", "ohp_rule_config_mediapipe.json"),
 }
 _EXERCISE_CHROMA_PATHS: Dict[str, str] = {
-    "plank":          os.path.join(os.path.dirname(__file__), "../rag/.chroma"),
+    "plank":          os.path.join(os.path.dirname(__file__), "../rag/.chroma/plank"),
     "overhead_press": os.path.join(os.path.dirname(__file__), "../rag/.chroma/overhead_press"),
 }
 _EXERCISE_CHROMA_COLLECTIONS: Dict[str, str] = {
@@ -1779,8 +1779,11 @@ def _retrieve_coaching_docs(
 ) -> List[Dict[str, Any]]:
     chroma_path       = _EXERCISE_CHROMA_PATHS.get(exercise_key, CHROMA_PATH)
     chroma_collection = _EXERCISE_CHROMA_COLLECTIONS.get(exercise_key, CHROMA_COLLECTION)
-    client     = chromadb.PersistentClient(path=chroma_path)
-    collection = client.get_collection(chroma_collection)
+    try:
+        client     = chromadb.PersistentClient(path=chroma_path)
+        collection = client.get_collection(chroma_collection)
+    except Exception:
+        return []
 
     view_kr = _view_to_kr(camera_view)
     retrieved: List[Dict[str, Any]] = []
