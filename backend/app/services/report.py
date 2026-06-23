@@ -274,7 +274,7 @@ class ReportService:
             return None
 
         feedback_texts = await FeedbackRepository(self.db).list_recent_contents(
-            user_id, exercise_id, limit=60
+            user_id, exercise_id, limit=15  # 토큰 절감(임시): analysis_results 가 주 근거
         )
         # V1 설계 핵심 입력 — 누적 구조화 자세분석 결과(있으면 long_term 의 1순위 근거)
         analysis_results = await WorkoutAnalysisRepository(self.db).list_recent_results(
@@ -427,11 +427,13 @@ class ReportService:
         return {"messages": messages, "summary": final.get("summary", "")}
 
     async def get_overview(self, user_id: int, user_created_at: date) -> ReportOverview:
-        """누적 요약 + 최근 30일 캘린더 + 최근 90일 점수 추이 + 종합 평가를 병렬로 조합."""
-        summary, calendar, score_trend, evaluation = await asyncio.gather(
-            self.get_summary(user_id, ReportPeriod.cumulative, None, None, user_created_at),
-            self.get_calendar(user_id, 30),
-            self.get_score_trend(user_id, 90, None),
-            self.get_evaluation(user_id, ReportPeriod.cumulative, None, user_created_at),
-        )
+        """누적 요약 + 최근 30일 캘린더 + 최근 90일 점수 추이 + 종합 평가를 조합한다.
+
+        같은 AsyncSession 에서는 asyncio.gather 동시 실행이 불가하므로 순차 조회한다.
+        (단일 세션=단일 커넥션이라 DB 단에서 어차피 직렬화됨)
+        """
+        summary = await self.get_summary(user_id, ReportPeriod.cumulative, None, None, user_created_at)
+        calendar = await self.get_calendar(user_id, 30)
+        score_trend = await self.get_score_trend(user_id, 90, None)
+        evaluation = await self.get_evaluation(user_id, ReportPeriod.cumulative, None, user_created_at)
         return ReportOverview(summary=summary, calendar=calendar, score_trend=score_trend, evaluation=evaluation)

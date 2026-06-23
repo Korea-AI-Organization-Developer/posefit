@@ -2142,7 +2142,7 @@ def daily_review_node(state:FeedbackState) -> dict:
 # ── long_term 평가용 헬퍼 ─────────────────────────────────────────────
 # 리포트 "종합 평가" — DB에 저장된 누적 피드백 텍스트를 LLM 으로 종합한다.
 _LONG_TERM_VALID_TYPES = {"positive", "warning", "tip"}
-_LONG_TERM_MAX_ITEMS = 60
+_LONG_TERM_MAX_ITEMS = 15  # 토큰 절감(임시): 프롬프트에 넣을 최근 피드백 최대 개수
 
 
 def _long_term_llm(state: FeedbackState):
