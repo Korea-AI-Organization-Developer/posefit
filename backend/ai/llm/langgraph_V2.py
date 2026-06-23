@@ -1525,7 +1525,7 @@ def pose_decide_node(state:FeedbackState) -> dict:
 # 출력: retrieved_docs, set_feedback
 # =========================================================
 
-CHROMA_PATH = ".chroma"
+CHROMA_PATH = os.path.join(os.path.dirname(__file__), "../rag/.chroma")
 CHROMA_COLLECTION = "posefit_coaching"
 
 # variant 우선순위 — 가장 코칭에 직접 쓸 수 있는 섹션
