@@ -8,12 +8,13 @@ from app.database import get_db
 from app.dependencies import get_current_user
 # User: 로그인 사용자 모델.
 from app.models.user import User
-# FeedbackRead: 세트 피드백 응답 형식. 종합 요청/응답 스키마도 함께 가져온다.
+# FeedbackRead: 세트 피드백 응답 형식. 종합(:summary) 요청/응답 스키마도 함께 가져온다.
 from app.schemas.feedback import (
     ExerciseFeedbackSummaryRequest,
     ExerciseFeedbackSummaryResponse,
     FeedbackRead,
 )
+# FeedbackService: 세트 피드백 조회 + LangGraph 종합 로직.
 from app.services.feedback import FeedbackService
 
 # exercise 라우터와 같은 prefix("/exercises")를 쓰되, 문서 분류는 Feedbacks 태그로 둔다.

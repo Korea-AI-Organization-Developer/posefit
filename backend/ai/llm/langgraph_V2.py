@@ -1633,6 +1633,10 @@ def _format_time_range(time_range: Dict[str, Any]) -> str:
     return f"{_format_seconds(start_sec)}초부터 {_format_seconds(end_sec)}초까지"
 
 
+def _format_timestamp_range(start_sec: Any, end_sec: Any) -> str:
+    return f"{_format_seconds(start_sec)}~{_format_seconds(end_sec)}"
+
+
 def _format_observed_values(observed_values: Dict[str, Any]) -> str:
     parts: List[str] = []
     for key, value in observed_values.items():
@@ -2005,6 +2009,102 @@ def _fallback_feedback_text_from_evaluations(
     }
 
 
+def _normalize_timestamp_items(
+    timestamp: Any,
+    fallback_items: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    fallback_items = fallback_items or []
+    if not isinstance(timestamp, list):
+        return fallback_items
+
+    normalized: List[Dict[str, Any]] = []
+    for index, item in enumerate(timestamp):
+        if not isinstance(item, dict):
+            continue
+
+        fallback = fallback_items[index] if index < len(fallback_items) else {}
+        time_text = str(
+            item.get("time")
+            or item.get("timestamp")
+            or fallback.get("time")
+            or ""
+        ).strip()
+        coaching = str(
+            item.get("coaching")
+            or item.get("message")
+            or fallback.get("coaching")
+            or ""
+        ).strip()
+
+        pose_value = item.get("pose")
+        if isinstance(pose_value, bool):
+            pose = pose_value
+        elif isinstance(pose_value, str):
+            pose = pose_value.strip().lower() in {"true", "correct", "ok", "정상", "잘함"}
+        else:
+            pose = bool(fallback.get("pose", False))
+
+        if time_text or coaching:
+            normalized.append({
+                "time": time_text,
+                "coaching": coaching,
+                "pose": pose,
+            })
+
+    return normalized or fallback_items
+
+
+def _timestamp_items_from_timeline_feedback(timeline_feedback: Any) -> List[Dict[str, Any]]:
+    if not isinstance(timeline_feedback, list):
+        return []
+
+    timestamp: List[Dict[str, Any]] = []
+    for item in timeline_feedback:
+        if not isinstance(item, dict):
+            continue
+
+        time_text = str(item.get("time") or "").strip()
+        if not time_text:
+            time_text = _format_timestamp_range(item.get("start_sec"), item.get("end_sec"))
+
+        pose_value = item.get("pose")
+        if isinstance(pose_value, bool):
+            pose = pose_value
+        else:
+            pose = str(item.get("status") or "").strip() == "correct"
+
+        timestamp.append({
+            "time": time_text,
+            "coaching": str(item.get("coaching") or item.get("message") or "").strip(),
+            "pose": pose,
+        })
+
+    return timestamp
+
+
+def _answer_payload_from_feedback_text(feedback_text: Dict[str, Any]) -> Dict[str, Any]:
+    fallback_timestamp = _timestamp_items_from_timeline_feedback(
+        feedback_text.get("timeline_feedback")
+    )
+    timestamp = _normalize_timestamp_items(
+        feedback_text.get("timestamp") or feedback_text.get("timestemp"),
+        fallback_timestamp,
+    )
+
+    return {
+        "raw": str(feedback_text.get("raw") or feedback_text.get("coaching") or "").strip(),
+        "summary": str(feedback_text.get("summary") or "").strip(),
+        "timestamp": timestamp,
+    }
+
+
+def _answer_payload_from_final_feedback(final_feedback: Dict[str, Any]) -> Dict[str, Any]:
+    feedback_text = final_feedback.get("feedback_text")
+    if isinstance(feedback_text, dict):
+        return _answer_payload_from_feedback_text(feedback_text)
+    return _answer_payload_from_feedback_text(final_feedback)
+
+
 def _refine_set_feedback_text(
     set_feedback: Dict[str, Any],
     exercise: str,
@@ -2185,15 +2285,14 @@ def set_text_summarize_node(state:FeedbackState) -> dict:
         camera_view=str(state.get("camera_view") or ""),
     )
     timeline_feedback = refined_feedback.get("timeline_feedback")
+    raw_feedback = str(refined_feedback.get("raw") or refined_feedback.get("coaching", ""))
+    timestamp = _timestamp_items_from_timeline_feedback(timeline_feedback or [])
 
     return {
         "feedback_text": {
+            "raw": raw_feedback,
             "summary": str(refined_feedback.get("summary", "")),
-            "main_issue": ", ".join(set_feedback.get("source_error_codes", [])),
-            "coaching": str(refined_feedback.get("coaching", "")),
-            "next_action": str(refined_feedback.get("next_action", "")),
-            "timeline_feedback": timeline_feedback or [],
-            "score_summary": set_feedback.get("score_summary", {}),
+            "timestamp": timestamp,
         }
     }
 
@@ -2203,6 +2302,126 @@ def set_text_summarize_node(state:FeedbackState) -> dict:
 # 출력: final_feedback
 # 역할: 최종 화면 출력용 피드백 구성
 # =========================================================
+def _compact_set_review_payload(final_feedback: Dict[str, Any]) -> Dict[str, Any]:
+    feedback_text = final_feedback.get("feedback_text") or {}
+    answer_payload = _answer_payload_from_final_feedback(final_feedback)
+    timeline_feedback = (
+        feedback_text.get("timeline_feedback")
+        if isinstance(feedback_text.get("timeline_feedback"), list)
+        else final_feedback.get("timeline_feedback", [])
+    )
+
+    window_evaluations = []
+    for item in final_feedback.get("window_evaluations", [])[:12]:
+        if not isinstance(item, dict):
+            continue
+        window_evaluations.append({
+            "window_id": item.get("window_id"),
+            "status": item.get("status"),
+            "score_pct": item.get("score_pct"),
+            "time_range": item.get("time_range"),
+            "errors": [
+                {
+                    "error_code": error.get("error_code"),
+                    "error_name": error.get("error_name"),
+                    "severity": error.get("severity"),
+                }
+                for error in item.get("errors", [])[:5]
+                if isinstance(error, dict)
+            ],
+        })
+
+    return {
+        "answer": answer_payload,
+        "main_issue": feedback_text.get("main_issue", ""),
+        "timeline_feedback": timeline_feedback,
+        "score_summary": final_feedback.get("score_summary", {}),
+        "source_error_codes": final_feedback.get("source_error_codes", []),
+        "window_evaluations": window_evaluations,
+    }
+
+
+def _set_review_fallback(
+    final_feedback: Dict[str, Any],
+    warnings: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    return _answer_payload_from_final_feedback(final_feedback)
+
+
+def _react_review_set_final_feedback(
+    final_feedback: Dict[str, Any],
+    validation_errors: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    fallback = _set_review_fallback(final_feedback, validation_errors)
+    feedback_text = final_feedback.get("feedback_text")
+    if not isinstance(feedback_text, dict) or not feedback_text:
+        return fallback
+
+    prompt_payload = _compact_set_review_payload(final_feedback)
+    prompt = (
+        "당신은 운동 세트 피드백의 최종 리뷰어입니다.\n"
+        "아래 후보를 ReAct 방식으로 내부 검토한 뒤, 사용자에게 보여줄 최종 JSON만 다듬으세요.\n"
+        "최종 JSON은 answer_exam.json 스타일의 raw, summary, timestamp 구조여야 합니다.\n"
+        "외부 도구/API 호출은 아직 연결되지 않았으므로 실제 Action은 호출하지 말고, 아래 내부 Action 목록만 사용하세요.\n\n"
+        "내부 ReAct 절차(출력 금지):\n"
+        "Thought: 최종 피드백에서 검증할 항목을 고른다.\n"
+        "Action: validate_schema | check_grounding | check_timeline_consistency | polish_feedback_text | finalize 중 하나를 고른다.\n"
+        "Observation: 제공된 JSON 안에서만 근거를 확인한다.\n"
+        "위 Thought/Action/Observation은 절대 출력하지 말고 최종 JSON만 출력한다.\n\n"
+        "검토 규칙:\n"
+        "- score_summary, source_error_codes, window_evaluations, timeline은 수정하지 마세요.\n"
+        "- 새 오류, 새 시간 구간, 새 점수를 만들지 마세요.\n"
+        "- raw는 timestamp coaching들을 시간 순서대로 자연스럽게 이어 붙인 전체 피드백입니다.\n"
+        "- summary는 raw 내용을 한 줄로 요약합니다.\n"
+        "- timestamp는 반드시 배열이며 각 항목은 time, coaching, pose만 가집니다.\n"
+        "- time은 기존 후보의 값을 유지하고, pose는 자세가 올바르면 true, 교정 필요면 false입니다.\n"
+        "- timestamp.coaching은 window_evaluations와 timeline_feedback의 근거 안에서만 자연스럽게 다듬으세요.\n"
+        "- 결과는 한국어로 간결하게 작성하세요.\n\n"
+        f"final_feedback 후보:\n{json.dumps(prompt_payload, ensure_ascii=False)}\n\n"
+        "반드시 아래 JSON 형식으로만 답하세요:\n"
+        '{"raw": "전체 피드백 문장", "summary": "raw의 내용 한 줄 요약", '
+        '"timestamp": [{"time": "0~4", "coaching": "해당 구간 피드백", "pose": false}]}'
+    )
+
+    try:
+        response = get_llm().invoke([HumanMessage(content=prompt)])
+        raw = response.content
+        if isinstance(raw, list):
+            raw = "\n".join(
+                part["text"] for part in raw if isinstance(part, dict) and "text" in part
+            )
+        json_match = re.search(r"\{[\s\S]*\}", str(raw).strip())
+        if not json_match:
+            return fallback
+        parsed = json.loads(json_match.group())
+    except Exception as exc:
+        print(f"[DEBUG] _react_review_set_final_feedback LLM 실패: {exc}")
+        return fallback
+
+    candidate: Any = parsed
+    if isinstance(parsed, dict) and isinstance(parsed.get("answer"), dict):
+        candidate = parsed["answer"]
+    if isinstance(candidate, dict) and isinstance(candidate.get("feedback_text"), dict):
+        candidate = _answer_payload_from_feedback_text(candidate["feedback_text"])
+    if not isinstance(candidate, dict):
+        return fallback
+
+    timestamp_source = candidate.get("timestamp") or candidate.get("timestemp")
+    if timestamp_source is None and isinstance(candidate.get("timeline_feedback"), list):
+        timestamp_source = _timestamp_items_from_timeline_feedback(candidate["timeline_feedback"])
+
+    timestamp = _normalize_timestamp_items(
+        timestamp_source,
+        fallback.get("timestamp", []),
+    )
+
+    return {
+        "raw": str(candidate.get("raw") or candidate.get("coaching") or fallback.get("raw") or "").strip(),
+        "summary": str(candidate.get("summary") or fallback.get("summary") or "").strip(),
+        "timestamp": timestamp,
+    }
+
+
 def set_review_node(state: FeedbackState) -> dict:
     print("출력 텍스트 리뷰 노드")
 
@@ -2218,10 +2437,12 @@ def set_review_node(state: FeedbackState) -> dict:
         validation_errors.append(f"set_feedback 누락 필드: {sorted(missing_sf)}")
 
     # feedback_text 필수 필드 검증
-    FEEDBACK_TEXT_REQUIRED = {"summary", "main_issue", "coaching", "next_action", "timeline_feedback"}
+    FEEDBACK_TEXT_REQUIRED = {"raw", "summary", "timestamp"}
     missing_ft = FEEDBACK_TEXT_REQUIRED - feedback_text.keys()
     if missing_ft:
         validation_errors.append(f"feedback_text 누락 필드: {sorted(missing_ft)}")
+    if "timestamp" in feedback_text and not isinstance(feedback_text.get("timestamp"), list):
+        validation_errors.append("feedback_text timestamp는 list여야 합니다.")
 
     # source_error_codes가 현재 exercise와 일치하는지 검증
     exercise_prefix = _exercise_rule_key(exercise)
@@ -2237,15 +2458,20 @@ def set_review_node(state: FeedbackState) -> dict:
                 f"다른 운동의 error_code 포함: {wrong_codes}"
             )
 
+    final_feedback = {
+        "type": "set",
+        "feedback_text": feedback_text,
+        "timeline": set_feedback.get("timeline", []),
+        "timeline_feedback": set_feedback.get("timeline_feedback", []),
+        "window_evaluations": set_feedback.get("window_evaluations", []),
+        "score_summary": set_feedback.get("score_summary", {}),
+        "source_error_codes": source_error_codes,
+    }
+    reviewed_feedback = _react_review_set_final_feedback(final_feedback, validation_errors)
+
     return {
-        "final_feedback": {
-            "type": "set",
-            "feedback_text": feedback_text,
-            "timeline": set_feedback.get("timeline", []),
-            "window_evaluations": set_feedback.get("window_evaluations", []),
-            "score_summary": set_feedback.get("score_summary", {}),
-            "source_error_codes": source_error_codes,
-        },
+        "feedback_text": reviewed_feedback,
+        "final_feedback": reviewed_feedback,
         "errors": validation_errors,
     }
 
@@ -2279,13 +2505,95 @@ def daily_text_summarize_node(state:FeedbackState) -> dict:
         }
     }
 
+
+def _react_review_daily_final_feedback(
+    final_feedback: Dict[str, Any],
+    validation_errors: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    fallback = dict(final_feedback)
+    feedback_text = final_feedback.get("feedback_text")
+    if not isinstance(feedback_text, dict) or not feedback_text:
+        return fallback
+
+    prompt_payload = {
+        "feedback_text": {
+            "summary": feedback_text.get("summary", ""),
+            "main_issue": feedback_text.get("main_issue", ""),
+            "coaching": feedback_text.get("coaching", ""),
+            "next_action": feedback_text.get("next_action", ""),
+        },
+        "daily_feedback": final_feedback.get("daily_feedback") or {},
+        "validation_errors": validation_errors or [],
+    }
+    prompt = (
+        "당신은 일일 운동 피드백의 최종 리뷰어입니다.\n"
+        "아래 후보를 ReAct 방식으로 내부 검토한 뒤, 사용자에게 보여줄 feedback_text만 다듬으세요.\n"
+        "외부 도구/API 호출은 연결되지 않았으므로 실제 Action은 호출하지 말고, 아래 내부 Action 목록만 사용하세요.\n\n"
+        "내부 ReAct 절차(출력 금지):\n"
+        "Thought: 일일 피드백에서 검증할 항목을 고른다.\n"
+        "Action: validate_schema | check_grounding | check_repeated_errors | polish_feedback_text | finalize 중 하나를 고른다.\n"
+        "Observation: 제공된 JSON 안에서만 근거를 확인한다.\n"
+        "위 Thought/Action/Observation은 절대 출력하지 말고 최종 JSON만 출력한다.\n\n"
+        "검토 규칙:\n"
+        "- daily_feedback은 수정하지 마세요.\n"
+        "- 새 점수, 새 오류, 새 세트 결과를 만들지 마세요.\n"
+        "- summary/coaching/next_action은 제공된 daily_feedback 근거 안에서만 자연스럽게 다듬으세요.\n"
+        "- 결과는 한국어로 간결하게 작성하세요.\n\n"
+        f"final_feedback 후보:\n{json.dumps(prompt_payload, ensure_ascii=False)}\n\n"
+        "반드시 아래 JSON 형식으로만 답하세요:\n"
+        '{"feedback_text": {"summary": "...", "main_issue": "...", "coaching": "...", "next_action": "..."}}'
+    )
+
+    try:
+        response = get_llm().invoke([HumanMessage(content=prompt)])
+        raw = response.content
+        if isinstance(raw, list):
+            raw = "\n".join(
+                part["text"] for part in raw if isinstance(part, dict) and "text" in part
+            )
+        json_match = re.search(r"\{[\s\S]*\}", str(raw).strip())
+        if not json_match:
+            return fallback
+        parsed = json.loads(json_match.group())
+    except Exception as exc:
+        print(f"[DEBUG] _react_review_daily_final_feedback LLM 실패: {exc}")
+        return fallback
+
+    parsed_text = parsed.get("feedback_text") if isinstance(parsed, dict) else {}
+    reviewed_text = dict(feedback_text)
+    if isinstance(parsed_text, dict):
+        for key in ("summary", "main_issue", "coaching", "next_action"):
+            value = parsed_text.get(key)
+            if isinstance(value, str) and value.strip():
+                reviewed_text[key] = value.strip()
+
+    return {
+        **final_feedback,
+        "feedback_text": reviewed_text,
+    }
+
+
 def daily_review_node(state:FeedbackState) -> dict:
     print("세트 종합 평가 출력 텍스트 리뷰 노드")
+    validation_errors: List[str] = []
+    daily_feedback = state.get("daily_feedback") or {}
+    feedback_text = state.get("feedback_text") or {}
+
+    FEEDBACK_TEXT_REQUIRED = {"summary", "main_issue", "coaching", "next_action"}
+    missing_ft = FEEDBACK_TEXT_REQUIRED - feedback_text.keys()
+    if missing_ft:
+        validation_errors.append(f"feedback_text 누락 필드: {sorted(missing_ft)}")
+
+    final_feedback = {
+        "type": "daily",
+        "feedback_text": feedback_text,
+        "daily_feedback": daily_feedback,
+    }
+    reviewed_feedback = _react_review_daily_final_feedback(final_feedback, validation_errors)
+
     return {
-        "final_feedback": {
-            "type": "daily",
-            "feedback_text": state.get("feedback_text", {}),
-        }
+        "final_feedback": reviewed_feedback,
+        "errors": validation_errors,
     }
 
 # --------------------------------------------------------------------
@@ -2492,29 +2800,43 @@ def long_text_summarize_node(state:FeedbackState) -> dict:
         }
     }
 
-def _refine_long_term_feedback(fb: Dict[str, Any], llm) -> Dict[str, Any]:
-    """Feedback Refiner — 1차 평가 초안을 사용자 친화적 문장으로 다듬는다.
-
-    내용(평가 결과)은 바꾸지 않고 표현만 개선한다. LLM 없으면/실패하면 초안 그대로.
-    """
+def _react_review_long_term_final_feedback(
+    final_feedback: Dict[str, Any],
+    llm,
+    validation_errors: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    fallback = dict(final_feedback)
     draft = {
-        "summary": fb.get("summary", ""),
-        "improvement_trend": fb.get("improvement_trend", ""),
-        "long_term_issue": fb.get("long_term_issue", ""),
-        "messages": fb.get("messages", []),
+        "summary": final_feedback.get("summary", ""),
+        "improvement_trend": final_feedback.get("improvement_trend", ""),
+        "long_term_issue": final_feedback.get("long_term_issue", ""),
+        "messages": final_feedback.get("messages", []),
     }
     if llm is None or not draft["messages"]:
-        return draft
+        return fallback
 
+    prompt_payload = {
+        "final_feedback": draft,
+        "validation_errors": validation_errors or [],
+    }
     prompt = (
-        "당신은 운동 코칭 피드백을 다듬는 편집자입니다.\n"
-        "아래 종합평가 초안의 '내용'은 그대로 두고, 표현만 더 자연스럽고 따뜻하며\n"
-        "사용자 친화적인 한국어로 다듬으세요.\n"
-        "★ 자세 판단은 이미 끝난 것입니다. 새로운 사실·자세 판단·오류를 추가하지 말고,\n"
-        "  오직 문장 표현만 개선하세요.\n\n"
-        f"=== 초안 ===\n{json.dumps(draft, ensure_ascii=False)}\n\n"
-        "반드시 아래 JSON 형식으로만 응답하세요:\n"
-        '{"summary": "...", "messages": [{"type": "positive|warning|tip", "text": "..."}]}'
+        "당신은 장기 운동 피드백의 최종 리뷰어입니다.\n"
+        "아래 후보를 ReAct 방식으로 내부 검토한 뒤, 사용자에게 보여줄 최종 JSON만 다듬으세요.\n"
+        "외부 도구/API 호출은 연결되지 않았으므로 실제 Action은 호출하지 말고, 아래 내부 Action 목록만 사용하세요.\n\n"
+        "내부 ReAct 절차(출력 금지):\n"
+        "Thought: 장기 피드백에서 검증할 항목을 고른다.\n"
+        "Action: validate_schema | check_grounding | check_trend_consistency | polish_feedback_text | finalize 중 하나를 고른다.\n"
+        "Observation: 제공된 JSON 안에서만 근거를 확인한다.\n"
+        "위 Thought/Action/Observation은 절대 출력하지 말고 최종 JSON만 출력한다.\n\n"
+        "검토 규칙:\n"
+        "- 새로운 자세 판단, 새 오류, 새 추세를 만들지 마세요.\n"
+        "- improvement_trend와 long_term_issue의 의미는 바꾸지 말고 표현만 다듬으세요.\n"
+        "- messages는 기존 type(positive, warning, tip)만 사용하세요.\n"
+        "- 제공된 후보의 근거 안에서만 한국어 문장을 자연스럽고 간결하게 다듬으세요.\n\n"
+        f"final_feedback 후보:\n{json.dumps(prompt_payload, ensure_ascii=False)}\n\n"
+        "반드시 아래 JSON 형식으로만 답하세요:\n"
+        '{"summary": "...", "improvement_trend": "...", "long_term_issue": "...", '
+        '"messages": [{"type": "positive|warning|tip", "text": "..."}]}'
     )
     try:
         response = llm.invoke([HumanMessage(content=prompt)])
@@ -2522,23 +2844,50 @@ def _refine_long_term_feedback(fb: Dict[str, Any], llm) -> Dict[str, Any]:
         if isinstance(raw, list):
             raw = "\n".join(p["text"] for p in raw if isinstance(p, dict) and "text" in p)
         parsed = _parse_long_term_json(str(raw))
-        if parsed.get("messages"):  # 정제 성공 시에만 교체(추이/이슈는 초안 유지)
-            return {
-                "summary": parsed.get("summary") or draft["summary"],
-                "improvement_trend": draft["improvement_trend"],
-                "long_term_issue": draft["long_term_issue"],
-                "messages": parsed["messages"],
-            }
-    except Exception:  # noqa: BLE001 — 정제 실패는 초안으로 폴백
-        pass
-    return draft
+    except Exception as exc:  # noqa: BLE001 — 정제 실패는 초안으로 폴백
+        print(f"[DEBUG] _react_review_long_term_final_feedback LLM 실패: {exc}")
+        return fallback
+
+    if not parsed.get("summary") and not parsed.get("messages"):
+        return fallback
+
+    return {
+        **final_feedback,
+        "summary": parsed.get("summary") or draft["summary"],
+        "improvement_trend": parsed.get("improvement_trend") or draft["improvement_trend"],
+        "long_term_issue": parsed.get("long_term_issue") or draft["long_term_issue"],
+        "messages": parsed.get("messages") or draft["messages"],
+    }
 
 
 def long_review_node(state:FeedbackState) -> dict:
-    print("종합 평가 결과 출력 텍스트 리뷰 노드(Feedback Refiner)")
-    fb = state.get("exercise_long_term_feedback") or {}
-    refined = _refine_long_term_feedback(fb, _long_term_llm(state))
-    return {"final_feedback": {"type": "long_term", **refined}}
+    print("종합 평가 결과 출력 텍스트 리뷰 노드")
+    validation_errors: List[str] = []
+    fb = state.get("feedback_text") or state.get("exercise_long_term_feedback") or {}
+
+    FEEDBACK_TEXT_REQUIRED = {"summary", "improvement_trend", "long_term_issue", "messages"}
+    missing_ft = FEEDBACK_TEXT_REQUIRED - fb.keys()
+    if missing_ft:
+        validation_errors.append(f"feedback_text 누락 필드: {sorted(missing_ft)}")
+    if "messages" in fb and not isinstance(fb.get("messages"), list):
+        validation_errors.append("feedback_text messages는 list여야 합니다.")
+
+    final_feedback = {
+        "type": "long_term",
+        "summary": fb.get("summary", ""),
+        "improvement_trend": fb.get("improvement_trend", ""),
+        "long_term_issue": fb.get("long_term_issue", ""),
+        "messages": fb.get("messages", []),
+    }
+    reviewed_feedback = _react_review_long_term_final_feedback(
+        final_feedback,
+        _long_term_llm(state),
+        validation_errors,
+    )
+    return {
+        "final_feedback": reviewed_feedback,
+        "errors": validation_errors,
+    }
 
 graph = StateGraph(FeedbackState)
 
