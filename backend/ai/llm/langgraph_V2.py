@@ -24,6 +24,32 @@ from langgraph.prebuilt import ToolNode
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
+_EXERCISE_ID_MAP: Dict[Any, str] = {
+    2: "plank",          "2": "plank",
+    "plank": "plank",    "플랭크": "plank",
+    4: "overhead_press", "4": "overhead_press",
+    "overhead_press": "overhead_press",
+    "오버헤드프레스": "overhead_press",
+    "overhead press": "overhead_press",
+    "ohp": "overhead_press",
+}
+_EXERCISE_RULE_CONFIGS: Dict[str, str] = {
+    "plank":          os.path.join("config", "plank_rule_config_mediapipe.json"),
+    "overhead_press": os.path.join("config", "ohp_rule_config_mediapipe.json"),
+}
+_EXERCISE_CHROMA_PATHS: Dict[str, str] = {
+    "plank":          os.path.join(os.path.dirname(__file__), "../rag/.chroma"),
+    "overhead_press": os.path.join(os.path.dirname(__file__), "../rag/.chroma/overhead_press"),
+}
+_EXERCISE_CHROMA_COLLECTIONS: Dict[str, str] = {
+    "plank":          "posefit_coaching",
+    "overhead_press": "posefit_coaching_ohp",
+}
+_EXERCISE_DEFAULT_VIEW: Dict[str, str] = {
+    "plank":          "side",
+    "overhead_press": "front",
+}
+
 
 def get_llm() -> ChatGoogleGenerativeAI:
     api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
@@ -306,9 +332,125 @@ def _load_normalized_pose(state: FeedbackState) -> Optional[Dict[str, Any]]:
     return None
 
 
+# =========================================================
+# OHP(overhead_press) feature extraction helpers
+# =========================================================
+def _midpoint(a: Dict[str, float], b: Dict[str, float]) -> Dict[str, float]:
+    return {"x": (a["x"] + b["x"]) / 2, "y": (a["y"] + b["y"]) / 2, "z": (a.get("z", 0) + b.get("z", 0)) / 2}
+
+
+def _lateral_lean_angle(top: Dict[str, float], bottom: Dict[str, float]) -> Optional[float]:
+    dx = top["x"] - bottom["x"]
+    dy = top["y"] - bottom["y"]
+    return abs(math.degrees(math.atan2(abs(dx), max(abs(dy), 1e-9))))
+
+
+def _norm2feature_ohp(state: FeedbackState) -> dict:
+    """OHP(front view) 전용 프레임 피처 추출."""
+    normalized_pose = _load_normalized_pose(state)
+    if not normalized_pose:
+        return {"frame_features": [], "errors": ["normalized_pose is missing or invalid."]}
+
+    frames = normalized_pose.get("frames")
+    if not isinstance(frames, list):
+        return {"frame_features": [], "errors": ["normalized_pose.frames must be a list."]}
+
+    frame_features: List[Dict[str, Any]] = []
+
+    for index, frame in enumerate(frames):
+        if not isinstance(frame, dict):
+            continue
+
+        frame_id     = frame.get("frame_id", index)
+        timestamp_ms = frame.get("timestamp_ms")
+        persons      = frame.get("persons")
+
+        base: Dict[str, Any] = {
+            "frame_id":      frame_id,
+            "timestamp_ms":  timestamp_ms,
+            "pose_detected": bool(frame.get("pose_detected")),
+            "valid":         False,
+        }
+
+        if not frame.get("pose_detected") or not isinstance(persons, list) or not persons:
+            base["invalid_reason"] = "pose_not_detected"
+            frame_features.append(base)
+            continue
+
+        person    = persons[0]
+        keypoints = person.get("keypoints") if isinstance(person, dict) else None
+        if not isinstance(keypoints, dict):
+            base["invalid_reason"] = "keypoints_missing"
+            frame_features.append(base)
+            continue
+
+        l_shoulder = _point(keypoints, "left_shoulder")
+        l_elbow    = _point(keypoints, "left_elbow")
+        l_wrist    = _point(keypoints, "left_wrist")
+        r_shoulder = _point(keypoints, "right_shoulder")
+        r_elbow    = _point(keypoints, "right_elbow")
+        r_wrist    = _point(keypoints, "right_wrist")
+        l_hip      = _point(keypoints, "left_hip")
+        r_hip      = _point(keypoints, "right_hip")
+
+        if not (l_shoulder and r_shoulder):
+            base["invalid_reason"] = "required_keypoints_missing"
+            base["missing_keypoints"] = ["left_shoulder", "right_shoulder"]
+            frame_features.append(base)
+            continue
+
+        shoulder_center = _midpoint(l_shoulder, r_shoulder)
+        hip_center      = _midpoint(l_hip, r_hip) if l_hip and r_hip else None
+        torso_length    = _distance(shoulder_center, hip_center) if hip_center else None
+
+        l_elbow_ext = _angle(l_shoulder, l_elbow, l_wrist) if l_elbow and l_wrist else None
+        r_elbow_ext = _angle(r_shoulder, r_elbow, r_wrist) if r_elbow and r_wrist else None
+
+        l_wrist_x      = l_wrist["x"] if l_wrist else None
+        r_wrist_x      = r_wrist["x"] if r_wrist else None
+        wrist_center_y = (l_wrist["y"] + r_wrist["y"]) / 2 if l_wrist and r_wrist else None
+
+        if l_wrist and r_wrist and torso_length and torso_length > 0:
+            wrist_height_diff = abs(l_wrist["y"] - r_wrist["y"]) / torso_length
+        else:
+            wrist_height_diff = None
+
+        bilateral   = ["left_shoulder", "left_elbow", "left_wrist",
+                       "right_shoulder", "right_elbow", "right_wrist"]
+        conf_scores = [_confidence(keypoints, n) for n in bilateral]
+        low_conf    = [n for n in bilateral if _confidence(keypoints, n) < 0.4]
+
+        frame_features.append({
+            "frame_id":                     frame_id,
+            "timestamp_ms":                 timestamp_ms,
+            "pose_detected":                True,
+            "valid":                        True,
+            "feature_confidence":           _round(sum(conf_scores) / len(conf_scores)),
+            "low_confidence_keypoints":     low_conf,
+            "left_elbow_extension_angle":   _round(l_elbow_ext),
+            "right_elbow_extension_angle":  _round(r_elbow_ext),
+            "left_wrist_x":                 _round(l_wrist_x),
+            "right_wrist_x":                _round(r_wrist_x),
+            "wrist_center_y":               _round(wrist_center_y),
+            "left_right_wrist_height_diff": _round(wrist_height_diff),
+            "torso_lateral_lean_angle":     _round(
+                _lateral_lean_angle(shoulder_center, hip_center) if hip_center else None
+            ),
+            "torso_length": _round(torso_length),
+        })
+
+    return {"frame_features": frame_features}
+
+
 # Node entrypoint: norm2feature
 def norm2feature(state: FeedbackState) -> dict:
-    print("feature 추출 노드")
+    exercise_key = _exercise_rule_key(state.get("exercise"))
+    print(f"[norm2feature] 시작 | exercise={state.get('exercise')} | exercise_key={exercise_key}")
+    if exercise_key == "overhead_press":
+        result = _norm2feature_ohp(state)
+        print(f"[norm2feature] OHP feature 추출 완료 | frame_features={len(result.get('frame_features', []))}개")
+        return result
+
     normalized_pose = _load_normalized_pose(state)
     if not normalized_pose:
         return {
@@ -489,6 +631,7 @@ def norm2feature(state: FeedbackState) -> dict:
         }
         frame_features.append(feature)
 
+    print(f"[norm2feature] 플랭크 feature 추출 완료 | frame_features={len(frame_features)}개")
     return {"frame_features": frame_features}
 
 
@@ -720,11 +863,71 @@ def _summarize_segment(
 # Segment Aggregator 노드
 ## feature노드에서 추출된 feature를 단위로 묶음
 ### segment_features
+def _detect_reps_from_frame_features(
+    frame_features: List[Dict[str, Any]],
+    signal_key: str = "wrist_center_y",
+    smoothing_window: int = 15,
+    valley_ratio: float = 0.30,
+    min_rep_frames: int = 20,
+) -> List[Dict[str, Any]]:
+    """wrist_center_y 신호에서 rep 구간을 자동 감지한다 (valley-based)."""
+    valid_frames = [
+        f for f in frame_features
+        if isinstance(f, dict) and _is_number(f.get(signal_key))
+    ]
+    if len(valid_frames) < 10:
+        return []
+
+    values = [float(f[signal_key]) for f in valid_frames]
+    n    = len(values)
+    half = max(1, smoothing_window // 2)
+    smoothed = [
+        sum(values[max(0, i - half):min(n, i + half + 1)])
+        / len(values[max(0, i - half):min(n, i + half + 1)])
+        for i in range(n)
+    ]
+
+    g_min        = min(smoothed)
+    g_max        = max(smoothed)
+    signal_range = g_max - g_min
+    if signal_range < 0.01:
+        return []
+
+    valley_thresh = g_min + valley_ratio * signal_range
+    valleys: List[int] = []
+    for i in range(1, n - 1):
+        if smoothed[i] < smoothed[i - 1] and smoothed[i] < smoothed[i + 1]:
+            if smoothed[i] <= valley_thresh:
+                if not valleys or i - valleys[-1] >= min_rep_frames:
+                    valleys.append(i)
+                elif smoothed[i] < smoothed[valleys[-1]]:
+                    valleys[-1] = i
+
+    print(f"[rep_detect] 유효프레임={n}, 신호범위={signal_range:.3f}, valleys={len(valleys)}")
+
+    if not valleys:
+        return []
+
+    rep_segments = []
+    for k, v in enumerate(valleys):
+        prev = (valleys[k - 1] + v) // 2 if k > 0 else 0
+        nxt  = (v + valleys[k + 1]) // 2 if k < len(valleys) - 1 else n - 1
+        rep_segments.append({
+            "start_frame_id":     valid_frames[prev].get("frame_id"),
+            "end_frame_id":       valid_frames[nxt].get("frame_id"),
+            "start_timestamp_ms": valid_frames[prev].get("timestamp_ms"),
+            "end_timestamp_ms":   valid_frames[nxt].get("timestamp_ms"),
+        })
+
+    print(f"[rep_detect] 감지된 rep 수={len(rep_segments)}")
+    return rep_segments
+
+
 def _default_segment_unit_for_exercise(exercise: Any) -> str:
-    exercise_name = str(exercise or "").strip().lower()
-    if "plank" in exercise_name or "플랭크" in exercise_name:
-        return "window"
-    return "rap"
+    key = _exercise_rule_key(exercise)
+    if key == "overhead_press":
+        return "rap"
+    return "window"
 
 
 def _normalize_segment_unit(segment_unit: Any) -> str:
@@ -742,7 +945,8 @@ def _normalize_segment_unit(segment_unit: Any) -> str:
 
 # Node entrypoint: feature2seg
 def feature2seg(state: FeedbackState) -> dict:
-    print("feature를 segment(window나 rap 단위로 묶는 노드)")
+    exercise_key = _exercise_rule_key(state.get("exercise"))
+    print(f"[feature2seg] 시작 | exercise_key={exercise_key}")
     frame_features = state.get("frame_features")
     if not isinstance(frame_features, list):
         return {
@@ -766,15 +970,26 @@ def feature2seg(state: FeedbackState) -> dict:
         raw_segments = _segment_frames_by_count(frame_features, window_size, overlap)
         segment_type = "frame_window"
     elif segment_unit == "rap":
-        rep_segments = state.get("rep_segments", [])
+        rep_segments = state.get("rep_segments") or []
         if not isinstance(rep_segments, list) or not rep_segments:
-            return {
-                "segment_unit": segment_unit,
-                "segment_features": [],
-                "errors": ["rep_segments is required when segment_unit='rap'."],
-            }
-        raw_segments = _segment_frames_by_rep(frame_features, rep_segments)
-        segment_type = "rap"
+            print(f"[feature2seg] rep_segments 없음 → 자동 감지 시작")
+            rep_segments = _detect_reps_from_frame_features(frame_features)
+        else:
+            print(f"[feature2seg] rep_segments 수동 입력 | {len(rep_segments)}개")
+        if not rep_segments:
+            print(f"[feature2seg] rep 자동 감지 실패 → window 모드로 fallback")
+            segment_unit = "window"
+            window_seconds = _non_negative_float(state.get("window_seconds"), 1.0)
+            if window_seconds == 0:
+                window_seconds = 1.0
+            overlap_seconds = _non_negative_float(state.get("window_overlap_seconds"), 0.0)
+            raw_segments = _segment_frames_by_time(frame_features, window_seconds, overlap_seconds)
+            segment_type = "time_window"
+            errors.append("rep_segments 자동 감지 실패, window 모드로 분석합니다.")
+        else:
+            print(f"[feature2seg] rep_segments={len(rep_segments)}개 사용")
+            raw_segments = _segment_frames_by_rep(frame_features, rep_segments)
+            segment_type = "rap"
     else:
         if segment_unit != "window":
             errors.append(f"Unknown segment_unit '{segment_unit}', using 'window'.")
@@ -792,6 +1007,7 @@ def feature2seg(state: FeedbackState) -> dict:
         if segment
     ]
 
+    print(f"[feature2seg] 완료 | segment_unit={segment_unit}, segment_features={len(segment_features)}개")
     result = {
         "segment_unit": segment_unit,
         "segment_features": segment_features,
@@ -817,10 +1033,11 @@ DEFAULT_RULE_CONFIG_PATH = os.path.join("config", "plank_rule_config_mediapipe.j
 
 
 def _exercise_rule_key(exercise: Any) -> str:
+    key = _EXERCISE_ID_MAP.get(exercise)
+    if key:
+        return key
     exercise_name = str(exercise or "").strip().lower()
-    if "plank" in exercise_name or "플랭크" in exercise_name:
-        return "plank"
-    return exercise_name
+    return _EXERCISE_ID_MAP.get(exercise_name, exercise_name)
 
 
 def _camera_view_rule_key(camera_view: Any) -> str:
@@ -832,6 +1049,10 @@ def _camera_view_rule_key(camera_view: Any) -> str:
     if "front" in view or "정면" in view:
         return "front"
     return view
+
+
+def _default_rule_config_path(exercise_key: str) -> str:
+    return _EXERCISE_RULE_CONFIGS.get(exercise_key, DEFAULT_RULE_CONFIG_PATH)
 
 
 def _load_rule_config(path: str) -> Dict[str, Any]:
@@ -1348,10 +1569,13 @@ def _summarize_triggered_issue(
 # Node entrypoint: pose_decide_node
 def pose_decide_node(state:FeedbackState) -> dict:
     print("동작이 잘한 동작인지, 잘못한 동작인지, 어느 부분이 잘못된건지 판단하는 노드")
-    exercise = state.get("exercise")
-    camera_view = state.get("camera_view")
+    exercise     = state.get("exercise")
+    exercise_key = _exercise_rule_key(exercise)
+    # 운동별 고정 촬영 방향이 있으면 state 값을 무시하고 우선 사용
+    camera_view      = _EXERCISE_DEFAULT_VIEW.get(exercise_key) or state.get("camera_view") or "side"
     segment_features = state.get("segment_features")
-    rule_config_path = str(state.get("rule_config_path") or DEFAULT_RULE_CONFIG_PATH)
+    rule_config_path = str(state.get("rule_config_path") or _default_rule_config_path(exercise_key))
+    print(f"[pose_decide] exercise_key={exercise_key}, camera_view={camera_view}, rule_config={rule_config_path}")
     analysis_output_path = state.get("analysis_output_path")
     if analysis_output_path is not None:
         analysis_output_path = str(analysis_output_path)
@@ -1551,10 +1775,12 @@ def _view_to_kr(camera_view: str) -> str:
 def _retrieve_coaching_docs(
     errors: List[Dict[str, Any]],
     camera_view: str,
-    chroma_path: Optional[str] = None,
+    exercise_key: str = "plank",
 ) -> List[Dict[str, Any]]:
-    client = chromadb.PersistentClient(path=chroma_path or CHROMA_PATH)
-    collection = client.get_collection(CHROMA_COLLECTION)
+    chroma_path       = _EXERCISE_CHROMA_PATHS.get(exercise_key, CHROMA_PATH)
+    chroma_collection = _EXERCISE_CHROMA_COLLECTIONS.get(exercise_key, CHROMA_COLLECTION)
+    client     = chromadb.PersistentClient(path=chroma_path)
+    collection = client.get_collection(chroma_collection)
 
     view_kr = _view_to_kr(camera_view)
     retrieved: List[Dict[str, Any]] = []
@@ -1670,6 +1896,11 @@ def _issue_action_phrase(error: Dict[str, Any]) -> str:
         "ankle_misalignment": "발목 정렬이 흐트러져",
         "unstable_body": "몸통 흔들림이 커져",
         "shoulder_collapse": "어깨 지지가 무너져",
+        # OHP
+        "incomplete_lockout":    "팔꿈치 완전 신전이 미완성되어",
+        "left_right_asymmetry":  "좌우 비대칭 프레스가 발생하여",
+        "unstable_press_path":   "덤벨 프레스 경로가 불안정하여",
+        "torso_lateral_lean":    "몸통 측면 기울기가 감지되어",
     }
     return phrases.get(code, f"{name}이 감지되어")
 
@@ -2068,7 +2299,11 @@ def _timestamp_items_from_timeline_feedback(timeline_feedback: Any) -> List[Dict
 
         time_text = str(item.get("time") or "").strip()
         if not time_text:
-            time_text = _format_timestamp_range(item.get("start_sec"), item.get("end_sec"))
+            rep_num = item.get("rep")
+            if _is_number(rep_num):
+                time_text = f"렙 {int(rep_num)}"
+            else:
+                time_text = _format_timestamp_range(item.get("start_sec"), item.get("end_sec"))
 
         pose_value = item.get("pose")
         if isinstance(pose_value, bool):
@@ -2108,22 +2343,15 @@ def _answer_payload_from_final_feedback(final_feedback: Dict[str, Any]) -> Dict[
     return _answer_payload_from_feedback_text(final_feedback)
 
 
-def _refine_set_feedback_text(
+def _build_plank_refine_prompt(
     set_feedback: Dict[str, Any],
     exercise: str,
     camera_view: str,
-) -> Dict[str, Any]:
-    fallback = _fallback_feedback_text_from_evaluations(set_feedback)
-    window_evaluations = set_feedback.get("window_evaluations")
-    if not isinstance(window_evaluations, list) or not window_evaluations:
-        return fallback
-
+    window_evaluations: List[Dict[str, Any]],
+) -> tuple:
     prompt_lines = [
-        _window_evaluation_prompt_line(evaluation)
-        for evaluation in window_evaluations
-        if isinstance(evaluation, dict)
+        _window_evaluation_prompt_line(e) for e in window_evaluations if isinstance(e, dict)
     ]
-
     system_prompt = (
         "당신은 운동 피드백 문장 편집 전문가입니다.\n\n"
         "## 역할과 제약\n"
@@ -2139,7 +2367,6 @@ def _refine_set_feedback_text(
         '"status": "correct 또는 needs_correction 중 하나만 사용", '
         '"message": "해당 구간 피드백 1문장"}]}'
     )
-
     user_prompt = (
         f"## 운동 정보\n"
         f"- 운동: {exercise}\n"
@@ -2152,14 +2379,73 @@ def _refine_set_feedback_text(
         f"2. 문장 형식은 'n초부터 m초까지는 ...'을 사용하세요.\n"
         f"3. 정상 구간은 짧게 칭찬하고, 오류 구간은 오류 상태와 코칭팁을 자연스럽게 연결하세요.\n"
         f"4. 인접 window의 상태와 오류가 동일하면 하나의 구간으로 병합하세요.\n\n"
-        f"## 작성 절차 (내부 추론용, 출력하지 말 것)\n"
-        f"Step 1. window 목록을 시간 순서로 정렬한다.\n"
-        f"Step 2. 인접 window 중 상태와 오류가 동일한 것을 병합한다.\n"
-        f"Step 3. 각 구간별로 coaching 문장을 작성한다.\n"
-        f"Step 4. 전체 요약(summary)과 next_action을 작성한다.\n"
-        f"Step 5. JSON 형식으로 최종 출력한다.\n\n"
         f"JSON만 출력하세요. 다른 텍스트는 포함하지 마세요."
     )
+    return system_prompt, user_prompt
+
+
+def _build_ohp_refine_prompt(
+    set_feedback: Dict[str, Any],
+    exercise: str,
+    camera_view: str,
+    window_evaluations: List[Dict[str, Any]],
+) -> tuple:
+    prompt_lines = [
+        _window_evaluation_prompt_line(e) for e in window_evaluations if isinstance(e, dict)
+    ]
+    system_prompt = (
+        "당신은 덤벨 오버헤드 프레스 피드백 문장 편집 전문가입니다.\n\n"
+        "## 역할과 제약\n"
+        "- 입력된 렙별 평가 결과와 RAG 코칭팁만 사용해 최종 피드백을 작성합니다.\n"
+        "- 자세 판단은 절대 새로 하지 않습니다. 제공된 오류와 렙 구간만 사용합니다.\n"
+        "- 없는 렙 구간이나 새로운 오류를 생성하지 않습니다.\n\n"
+        "## 출력 형식\n"
+        "반드시 아래 JSON 스키마를 따르세요.\n\n"
+        '{"summary": "세트 전체를 1~2문장으로 요약", '
+        '"coaching": "렙 순서대로 작성한 렙별 피드백 (전체 서술형)", '
+        '"next_action": "다음 세트에서 가장 중요하게 개선할 점 1가지", '
+        '"timeline_feedback": [{"start_sec": 0.0, "end_sec": 5.0, '
+        '"status": "correct 또는 needs_correction 중 하나만 사용", '
+        '"message": "해당 렙 피드백 1문장"}]}'
+    )
+    user_prompt = (
+        f"## 운동 정보\n"
+        f"- 운동: {exercise} (덤벨 오버헤드 프레스)\n"
+        f"- 촬영 방향: {camera_view}\n"
+        f"- 초안 요약: {set_feedback.get('summary', '')}\n\n"
+        f"## 렙별 평가\n"
+        f"{chr(10).join(prompt_lines)}\n\n"
+        f"## 작성 규칙\n"
+        f"1. coaching은 렙 순서대로 작성하세요.\n"
+        f"2. 각 렙은 시간 구간(n초~m초)을 기준으로 설명하세요.\n"
+        f"3. 정상 렙은 짧게 칭찬하고, 오류 렙은 오류와 코칭팁을 자연스럽게 연결하세요.\n"
+        f"4. incomplete_lockout: 락아웃 미완성, left_right_asymmetry: 좌우 비대칭,\n"
+        f"   unstable_press_path: 경로 불안정, torso_lateral_lean: 몸통 측면 기울기\n\n"
+        f"JSON만 출력하세요. 다른 텍스트는 포함하지 마세요."
+    )
+    return system_prompt, user_prompt
+
+
+def _refine_set_feedback_text(
+    set_feedback: Dict[str, Any],
+    exercise: str,
+    camera_view: str,
+) -> Dict[str, Any]:
+    fallback = _fallback_feedback_text_from_evaluations(set_feedback)
+    window_evaluations = set_feedback.get("window_evaluations")
+    if not isinstance(window_evaluations, list) or not window_evaluations:
+        return fallback
+
+    exercise_key = _exercise_rule_key(exercise)
+    print(f"[refine_feedback] exercise_key={exercise_key} | window_evaluations={len(window_evaluations)}개 | LLM 호출 시작")
+    if exercise_key == "overhead_press":
+        system_prompt, user_prompt = _build_ohp_refine_prompt(
+            set_feedback, exercise, camera_view, window_evaluations
+        )
+    else:
+        system_prompt, user_prompt = _build_plank_refine_prompt(
+            set_feedback, exercise, camera_view, window_evaluations
+        )
 
     try:
         response = get_llm().invoke([
@@ -2253,17 +2539,19 @@ def _generate_set_feedback(
 
 def coaching_generator_node(state: FeedbackState) -> dict:
     analysis_result = state.get("analysis_result") or {}
-    exercise = str(state.get("exercise") or "운동")
-    camera_view = str(state.get("camera_view") or "")
-    exercise_id = state.get("exercise_id")
-
-    chroma_path = CHROMA_OHP_PATH if exercise_id == 4 else None
+    exercise        = state.get("exercise")
+    exercise_key    = _exercise_rule_key(exercise)
+    camera_view     = str(state.get("camera_view") or _EXERCISE_DEFAULT_VIEW.get(exercise_key, ""))
+    errors_found    = analysis_result.get("errors", [])
+    print(f"[coaching_generator] exercise_key={exercise_key} | camera_view={camera_view} | errors={len(errors_found)}개")
 
     retrieved_docs = _retrieve_coaching_docs(
-        errors=analysis_result.get("errors", []),
+        errors=errors_found,
         camera_view=camera_view,
-        chroma_path=chroma_path,
+        exercise_key=exercise_key,
     )
+    print(f"[coaching_generator] RAG 검색 완료 | retrieved_docs={len(retrieved_docs)}개")
+    exercise = str(exercise or "운동")
 
     set_feedback = _generate_set_feedback(
         analysis_result=analysis_result,
@@ -2355,20 +2643,11 @@ def _set_review_fallback(
     return _answer_payload_from_final_feedback(final_feedback)
 
 
-def _react_review_set_final_feedback(
-    final_feedback: Dict[str, Any],
-    validation_errors: Optional[List[str]] = None,
-) -> Dict[str, Any]:
-    fallback = _set_review_fallback(final_feedback, validation_errors)
-    feedback_text = final_feedback.get("feedback_text")
-    if not isinstance(feedback_text, dict) or not feedback_text:
-        return fallback
-
-    prompt_payload = _compact_set_review_payload(final_feedback)
-    prompt = (
+def _build_plank_review_prompt(prompt_payload: Dict[str, Any]) -> str:
+    return (
         "당신은 운동 세트 피드백의 최종 리뷰어입니다.\n"
         "아래 후보를 ReAct 방식으로 내부 검토한 뒤, 사용자에게 보여줄 최종 JSON만 다듬으세요.\n"
-        "최종 JSON은 answer_exam.json 스타일의 raw, summary, timestamp 구조여야 합니다.\n"
+        "최종 JSON은 raw, summary, timestamp 구조여야 합니다.\n"
         "외부 도구/API 호출은 아직 연결되지 않았으므로 실제 Action은 호출하지 말고, 아래 내부 Action 목록만 사용하세요.\n\n"
         "내부 ReAct 절차(출력 금지):\n"
         "Thought: 최종 피드백에서 검증할 항목을 고른다.\n"
@@ -2389,6 +2668,51 @@ def _react_review_set_final_feedback(
         '{"raw": "전체 피드백 문장", "summary": "raw의 내용 한 줄 요약", '
         '"timestamp": [{"time": "0~4", "coaching": "해당 구간 피드백", "pose": false}]}'
     )
+
+
+def _build_ohp_review_prompt(prompt_payload: Dict[str, Any]) -> str:
+    return (
+        "당신은 덤벨 오버헤드 프레스 세트 피드백의 최종 리뷰어입니다.\n"
+        "아래 후보를 ReAct 방식으로 내부 검토한 뒤, 사용자에게 보여줄 최종 JSON만 다듬으세요.\n"
+        "최종 JSON은 raw, summary, timestamp 구조여야 합니다.\n"
+        "외부 도구/API 호출은 아직 연결되지 않았으므로 실제 Action은 호출하지 말고, 아래 내부 Action 목록만 사용하세요.\n\n"
+        "내부 ReAct 절차(출력 금지):\n"
+        "Thought: 최종 피드백에서 검증할 항목을 고른다.\n"
+        "Action: validate_schema | check_grounding | check_rep_consistency | polish_feedback_text | finalize 중 하나를 고른다.\n"
+        "Observation: 제공된 JSON 안에서만 근거를 확인한다.\n"
+        "위 Thought/Action/Observation은 절대 출력하지 말고 최종 JSON만 출력한다.\n\n"
+        "검토 규칙:\n"
+        "- score_summary, source_error_codes, window_evaluations, timeline은 수정하지 마세요.\n"
+        "- 새 오류, 새 렙 구간, 새 점수를 만들지 마세요.\n"
+        "- raw는 timestamp coaching들을 렙 순서대로 자연스럽게 이어 붙인 전체 피드백입니다.\n"
+        "- summary는 raw 내용을 한 줄로 요약합니다.\n"
+        "- timestamp는 반드시 배열이며 각 항목은 time, coaching, pose만 가집니다.\n"
+        "- time 필드에는 '렙 N' 형식(예: '렙 1', '렙 2')을 사용합니다.\n"
+        "- pose는 해당 렙 자세가 올바르면 true, 교정 필요면 false입니다.\n"
+        "- timestamp.coaching은 window_evaluations와 timeline_feedback의 근거 안에서만 자연스럽게 다듬으세요.\n"
+        "- 결과는 한국어로 간결하게 작성하세요.\n\n"
+        f"final_feedback 후보:\n{json.dumps(prompt_payload, ensure_ascii=False)}\n\n"
+        "반드시 아래 JSON 형식으로만 답하세요:\n"
+        '{"raw": "전체 피드백 문장", "summary": "raw의 내용 한 줄 요약", '
+        '"timestamp": [{"time": "렙 1", "coaching": "해당 렙 피드백", "pose": false}]}'
+    )
+
+
+def _react_review_set_final_feedback(
+    final_feedback: Dict[str, Any],
+    validation_errors: Optional[List[str]] = None,
+    exercise_key: str = "plank",
+) -> Dict[str, Any]:
+    fallback = _set_review_fallback(final_feedback, validation_errors)
+    feedback_text = final_feedback.get("feedback_text")
+    if not isinstance(feedback_text, dict) or not feedback_text:
+        return fallback
+
+    prompt_payload = _compact_set_review_payload(final_feedback)
+    if exercise_key == "overhead_press":
+        prompt = _build_ohp_review_prompt(prompt_payload)
+    else:
+        prompt = _build_plank_review_prompt(prompt_payload)
 
     try:
         response = get_llm().invoke([HumanMessage(content=prompt)])
@@ -2430,12 +2754,13 @@ def _react_review_set_final_feedback(
 
 
 def set_review_node(state: FeedbackState) -> dict:
-    print("출력 텍스트 리뷰 노드")
-
     validation_errors: List[str] = []
-    set_feedback = state.get("set_feedback") or {}
+    set_feedback  = state.get("set_feedback") or {}
     feedback_text = state.get("feedback_text") or {}
-    exercise = str(state.get("exercise") or "")
+    exercise      = state.get("exercise")
+    exercise_key  = _exercise_rule_key(exercise)
+    exercise      = str(exercise or "")
+    print(f"[set_review] 시작 | exercise_key={exercise_key}")
 
     # set_feedback 필수 필드 검증
     SET_FEEDBACK_REQUIRED = {"summary", "coaching", "timeline", "source_error_codes", "generation_stage"}
@@ -2474,7 +2799,10 @@ def set_review_node(state: FeedbackState) -> dict:
         "score_summary": set_feedback.get("score_summary", {}),
         "source_error_codes": source_error_codes,
     }
-    reviewed_feedback = _react_review_set_final_feedback(final_feedback, validation_errors)
+    print(f"[set_review] LLM 리뷰 시작 | validation_errors={len(validation_errors)}개")
+    reviewed_feedback = _react_review_set_final_feedback(final_feedback, validation_errors, exercise_key)
+    timestamp_count = len(reviewed_feedback.get("timestamp") or [])
+    print(f"[set_review] 완료 | timestamp={timestamp_count}개 | summary={str(reviewed_feedback.get('summary',''))[:40]}")
 
     return {
         "feedback_text": reviewed_feedback,
