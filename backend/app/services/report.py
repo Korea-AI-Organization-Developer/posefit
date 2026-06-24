@@ -285,7 +285,8 @@ class ReportService:
             user_id, exercise_id, len(feedback_texts), len(analysis_results),
         )
         if not feedback_texts and not analysis_results:
-            logger.warning("[종합평가] feedback_texts·analysis_results 모두 없음 → 통계만으로 AI 평가 시도")
+            logger.info("[종합평가] 피드백/분석 데이터 없음 → 규칙 기반 폴백")
+            return None
 
         daily_metrics = await self.repo.get_daily_metrics(
             user_id, exercise_id, summary.period_start, summary.period_end
