@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 # LangGraph 종합 평가 최대 대기(초). 초과 시 규칙 기반으로 폴백한다.
 # thinking_budget=0 적용으로 응답이 3~5초 수준 → 여유 있게 25초.
 # (더 빠른 응답이 필요하면 GEMINI_MODEL 을 gemini-2.5-flash-lite 로 변경: ~3초)
-_AI_EVALUATION_TIMEOUT_SEC = 25
+_AI_EVALUATION_TIMEOUT_SEC = 60
 
 # 칼로리 계산용 운동별 MET (kcal = MET × 체중kg × 시간h).
 # workout_calendar.html 의 per-rep 계수를 MET 로 환산한 값.
@@ -271,20 +271,22 @@ class ReportService:
         피드백이 없거나 / API 키가 없거나 / 실패하면 None → 규칙 기반으로 폴백.
         """
         if summary.sessions_count == 0:
+            logger.info("[종합평가] sessions_count=0 → 스킵")
             return None
 
         feedback_texts = await FeedbackRepository(self.db).list_recent_contents(
-            user_id, exercise_id, limit=15  # 토큰 절감(임시): analysis_results 가 주 근거
+            user_id, exercise_id, limit=15
         )
-        # V1 설계 핵심 입력 — 누적 구조화 자세분석 결과(있으면 long_term 의 1순위 근거)
         analysis_results = await WorkoutAnalysisRepository(self.db).list_recent_results(
             user_id, exercise_id, limit=30
         )
+        logger.info(
+            "[종합평가] user=%s exercise=%s feedback_texts=%d analysis_results=%d",
+            user_id, exercise_id, len(feedback_texts), len(analysis_results),
+        )
         if not feedback_texts and not analysis_results:
-            logger.warning("[AI평가] feedback_texts와 analysis_results 모두 비어있음 → 통계만으로 AI 평가 시도")
-            # 데이터 없어도 report_stats(세션 수·점수 등)으로 AI 평가 진행. long_term 분기는 report_stats로 라우팅.
+            logger.warning("[종합평가] feedback_texts·analysis_results 모두 없음 → 통계만으로 AI 평가 시도")
 
-        # 장기 추세 지표 — 코드가 deterministic 하게 계산(원칙 2: LLM 은 판단 안 함, 서술만).
         daily_metrics = await self.repo.get_daily_metrics(
             user_id, exercise_id, summary.period_start, summary.period_end
         )
@@ -301,19 +303,11 @@ class ReportService:
 
         api_key = settings.google_api_key or settings.gemini_api_key
         if not api_key:
-            logger.warning("[AI평가] API 키 없음 → 규칙 기반으로 폴백")
+            logger.warning("[종합평가] API 키 없음 → 규칙 기반 폴백")
             return None
 
-        logger.warning(
-            "[AI평가] LangGraph 호출 시작: sessions=%d feedback=%d analysis=%d",
-            summary.sessions_count,
-            len(feedback_texts),
-            len(analysis_results),
-        )
-
+        logger.info("[종합평가] LangGraph 호출 시작 model=%s", settings.gemini_model)
         try:
-            # langgraph_V1 의 통합 그래프(long_term 분기)를 호출한다.
-            # chromadb 등 무거운 의존성을 끌어오므로 lazy import + to_thread(동기 그래프).
             result = await asyncio.wait_for(
                 asyncio.to_thread(
                     self._run_long_term_graph,
@@ -325,10 +319,11 @@ class ReportService:
                 ),
                 timeout=_AI_EVALUATION_TIMEOUT_SEC,
             )
-        except Exception as exc:  # noqa: BLE001 — 어떤 실패든 규칙 기반으로 폴백
-            logger.warning("AI 종합 평가 실패, 규칙 기반으로 폴백: %s", exc)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("AI 종합 평가 실패, 규칙 기반으로 폴백: %s", exc, exc_info=True)
             return None
 
+        logger.info("[종합평가] LangGraph 결과: %s", result)
         if not result:
             return None
 
@@ -419,8 +414,11 @@ class ReportService:
         api_key: str,
         model: str,
     ) -> dict | None:
-        """langgraph_V1 통합 그래프를 long_term 분기로 실행(동기). final_feedback 반환."""
-        from ai.llm.langgraph_V1 import posefit_graph
+        """langgraph_V2 통합 그래프를 long_term 분기로 실행(동기). final_feedback 반환."""
+        import logging as _logging
+        _log = _logging.getLogger(__name__)
+
+        from ai.llm.langgraph_V2 import posefit_graph
 
         result = posefit_graph.invoke({
             "historical_feedback_texts": feedback_texts,
@@ -429,8 +427,14 @@ class ReportService:
             "api_key": api_key,
             "model": model,
         })
+
+        graph_errors = result.get("errors") or []
+        if graph_errors:
+            _log.warning("[종합평가] 그래프 내부 에러: %s", graph_errors)
+
         final = result.get("final_feedback") or {}
         messages = final.get("messages") or []
+        _log.info("[종합평가] final_feedback=%s messages_count=%d", final.keys(), len(messages))
         if not messages:
             return None
         return {"messages": messages, "summary": final.get("summary", "")}
