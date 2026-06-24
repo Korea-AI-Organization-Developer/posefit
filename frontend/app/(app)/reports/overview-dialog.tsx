@@ -13,16 +13,16 @@ function formatDuration(sec: number): string {
   return `${m}분`;
 }
 
-// 소모 칼로리 → accent 알파(명도) 4단계. 대시보드 ActivityHeatmap 과 동일한 방식.
-// 구간은 workout_calendar.html 의 하위 경계(50/150)를 4단계에 맞춰 축약했다.
-function intensityClass(kcal: number): string {
-  if (kcal <= 0) return "bg-surface-muted";
-  if (kcal <= 50) return "bg-accent/25";
-  if (kcal <= 150) return "bg-accent/55";
-  return "bg-accent";
-}
+/* 활동 강도 — 운동 횟수 기준, 대시보드 ActivityHeatmap 과 동일한 5단계 초록 톤 */
+const LEVEL_COLORS = ["#EDEDEE", "#C8EDE4", "#8DD5C3", "#46BBA2", "#0D9B7B"];
 
-const LEGEND_CLASSES = ["bg-surface-muted", "bg-accent/25", "bg-accent/55", "bg-accent"];
+function sessionLevel(count: number): number {
+  if (count <= 0) return 0;
+  if (count <= 2) return 1;
+  if (count <= 5) return 2;
+  if (count <= 9) return 3;
+  return 4;
+}
 
 function CalendarGrid({ days }: { days: ReportOverview["calendar"]["days"] }) {
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -39,18 +39,19 @@ function CalendarGrid({ days }: { days: ReportOverview["calendar"]["days"] }) {
         ))}
         {days.map((day) => {
           const isToday = day.date === todayStr;
-          const tooltip = day.calories > 0
-            ? `${day.date} · ${day.calories}kcal · ${day.sessionsCount}회${day.avgScore != null ? ` · 평균 ${day.avgScore}점` : ""}`
+          const tooltip = day.sessionsCount > 0
+            ? `${day.date} · ${day.sessionsCount}회${day.avgScore != null ? ` · 평균 ${day.avgScore}점` : ""}`
             : day.date;
           return (
             <div
               key={day.date}
               title={tooltip}
               style={{
+                backgroundColor: LEVEL_COLORS[sessionLevel(day.sessionsCount)],
                 outline: isToday ? "2px solid #1D9E75" : undefined,
                 outlineOffset: isToday ? "1px" : undefined,
               }}
-              className={`aspect-square cursor-pointer rounded-md transition-transform hover:scale-110 ${intensityClass(day.calories)}`}
+              className="aspect-square cursor-pointer rounded-md transition-transform hover:scale-110"
             />
           );
         })}
@@ -58,8 +59,8 @@ function CalendarGrid({ days }: { days: ReportOverview["calendar"]["days"] }) {
       {/* 범례 */}
       <div className="mt-3 flex items-center justify-end gap-1.5">
         <span className="text-xs text-text-muted">적음</span>
-        {LEGEND_CLASSES.map((cls) => (
-          <div key={cls} className={`size-3.5 rounded-sm ${cls}`} />
+        {LEVEL_COLORS.map((color) => (
+          <div key={color} className="size-3.5 rounded-sm" style={{ backgroundColor: color }} />
         ))}
         <span className="text-xs text-text-muted">많음</span>
       </div>

@@ -1,4 +1,4 @@
-import { Card, CardBody, CardHeader } from "@/components/ui";
+﻿import { Card, CardBody, CardHeader } from "@/components/ui";
 import { formatDay } from "@/lib/format";
 import type { CalendarDay } from "@/lib/api/reports";
 
@@ -7,13 +7,15 @@ const TOTAL_DAYS = 30;
 /* 주 시작은 월요일 — weeklySessionsCount 의 월~일(KST) 기준과 맞춘다 */
 const WEEKDAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
 
-/* 활동 강도 — 소모 칼로리(kcal) 기준, accent 알파(명도) 차로만 구분한다.
- * 구간은 workout_calendar.html 의 하위 경계(50/150)를 4단계에 맞춰 축약했다. */
-function intensityClass(kcal: number): string {
-  if (kcal <= 0) return "bg-surface-muted";
-  if (kcal <= 50) return "bg-accent/25";
-  if (kcal <= 150) return "bg-accent/55";
-  return "bg-accent";
+/* 활동 강도 — 운동 횟수 기준, overview-dialog CalendarGrid 와 동일한 5단계 초록 톤 */
+const LEVEL_COLORS = ["#EDEDEE", "#C8EDE4", "#8DD5C3", "#46BBA2", "#0D9B7B"];
+
+function sessionLevel(count: number): number {
+  if (count <= 0) return 0;
+  if (count <= 2) return 1;
+  if (count <= 5) return 2;
+  if (count <= 9) return 3;
+  return 4;
 }
 
 /** baseDate(YYYY-MM-DD)에서 과거 N일의 날짜 목록 — 오래된 날부터 */
@@ -44,9 +46,8 @@ export function ActivityHeatmap({
   baseDate: string;
 }) {
   const countByDate = new Map(days.map((d) => [d.date, d.sessionsCount]));
-  const kcalByDate = new Map(days.map((d) => [d.date, d.calories]));
   const dates = lastNDates(baseDate, TOTAL_DAYS);
-  const activeDays = dates.filter((date) => (kcalByDate.get(date) ?? 0) > 0);
+  const activeDays = dates.filter((date) => (countByDate.get(date) ?? 0) > 0);
   const leadingBlanks = mondayIndex(dates[0]);
 
   return (
@@ -73,15 +74,12 @@ export function ActivityHeatmap({
             ))}
             {dates.map((date) => {
               const count = countByDate.get(date) ?? 0;
-              const kcal = kcalByDate.get(date) ?? 0;
-              const title = kcal > 0
-                ? `${formatDay(date)} · ${kcal}kcal · ${count}회`
-                : `${formatDay(date)} · ${count}회`;
               return (
                 <span
                   key={date}
-                  title={title}
-                  className={`aspect-square rounded-xs ${intensityClass(kcal)}`}
+                  title={`${formatDay(date)} · ${count}회`}
+                  style={{ backgroundColor: LEVEL_COLORS[sessionLevel(count)] }}
+                  className="aspect-square rounded-xs"
                 />
               );
             })}
@@ -89,10 +87,9 @@ export function ActivityHeatmap({
         </div>
         <div className="mt-4 flex items-center justify-end gap-1.5 text-xs text-text-subtle">
           적음
-          <span className="size-2.5 rounded-xs bg-surface-muted" />
-          <span className="size-2.5 rounded-xs bg-accent/25" />
-          <span className="size-2.5 rounded-xs bg-accent/55" />
-          <span className="size-2.5 rounded-xs bg-accent" />
+          {LEVEL_COLORS.map((color) => (
+            <span key={color} className="size-2.5 rounded-xs" style={{ backgroundColor: color }} />
+          ))}
           많음
         </div>
       </CardBody>
