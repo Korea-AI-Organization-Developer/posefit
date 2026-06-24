@@ -285,8 +285,8 @@ class ReportService:
             user_id, exercise_id, len(feedback_texts), len(analysis_results),
         )
         if not feedback_texts and not analysis_results:
-            logger.info("[종합평가] 피드백/분석 데이터 없음 → 규칙 기반 폴백")
-            return None
+            logger.warning("[AI평가] feedback_texts와 analysis_results 모두 비어있음 → 통계만으로 AI 평가 시도")
+            # 데이터 없어도 report_stats(세션 수·점수 등)으로 AI 평가 진행. long_term 분기는 report_stats로 라우팅.
 
         daily_metrics = await self.repo.get_daily_metrics(
             user_id, exercise_id, summary.period_start, summary.period_end
@@ -304,10 +304,17 @@ class ReportService:
 
         api_key = settings.google_api_key or settings.gemini_api_key
         if not api_key:
-            logger.warning("[종합평가] API 키 없음 → 규칙 기반 폴백")
+            logger.warning("[AI평가] API 키 없음 → 규칙 기반으로 폴백")
             return None
 
-        logger.info("[종합평가] LangGraph 호출 시작 model=%s", settings.gemini_model)
+        logger.warning(
+            "[AI평가] LangGraph 호출 시작: sessions=%d feedback=%d analysis=%d",
+            summary.sessions_count,
+            len(feedback_texts),
+            len(analysis_results),
+        )
+
+
         try:
             result = await asyncio.wait_for(
                 asyncio.to_thread(
@@ -440,14 +447,14 @@ class ReportService:
             return None
         return {"messages": messages, "summary": final.get("summary", "")}
 
-    async def get_overview(self, user_id: int, user_created_at: date) -> ReportOverview:
+    async def get_overview(self, user_id: int, user_created_at: date, exercise_id: int | None = None) -> ReportOverview:
         """누적 요약 + 최근 30일 캘린더 + 최근 90일 점수 추이 + 종합 평가를 조합한다.
 
         같은 AsyncSession 에서는 asyncio.gather 동시 실행이 불가하므로 순차 조회한다.
         (단일 세션=단일 커넥션이라 DB 단에서 어차피 직렬화됨)
         """
-        summary = await self.get_summary(user_id, ReportPeriod.cumulative, None, None, user_created_at)
+        summary = await self.get_summary(user_id, ReportPeriod.cumulative, None, exercise_id, user_created_at)
         calendar = await self.get_calendar(user_id, 30)
-        score_trend = await self.get_score_trend(user_id, 90, None)
-        evaluation = await self.get_evaluation(user_id, ReportPeriod.cumulative, None, user_created_at)
+        score_trend = await self.get_score_trend(user_id, 90, exercise_id)
+        evaluation = await self.get_evaluation(user_id, ReportPeriod.cumulative, exercise_id, user_created_at)
         return ReportOverview(summary=summary, calendar=calendar, score_trend=score_trend, evaluation=evaluation)

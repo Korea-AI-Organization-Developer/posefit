@@ -50,7 +50,7 @@ export default async function ReportsPage({
   const validIds = new Set(exercises.map((e) => e.id));
   const exerciseId = (() => {
     const v = Number(firstParam(sp.exerciseId));
-    return validIds.has(v) ? v : undefined;
+    return validIds.has(v) ? v : exercises[0]?.id;
   })();
 
   const [summary, trend] = await Promise.all([
