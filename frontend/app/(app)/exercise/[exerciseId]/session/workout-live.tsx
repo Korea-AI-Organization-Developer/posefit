@@ -259,7 +259,7 @@ export function WorkoutLive({
         <div className="flex flex-col gap-3">
           <div className="rounded-md border border-border bg-surface p-4">
             <p className="text-xs text-text-subtle">
-              {phase === "recording" ? "녹화 중" : "현재 세트"}
+              {phase === "recording" ? "녹화 중" : "다음 세트"}
             </p>
             <p className="mt-1 font-mono text-2xl font-semibold tabular-nums">
               {phase === "recording" ? clock(elapsed) : `세트 ${sets.length + 1}`}
@@ -268,7 +268,7 @@ export function WorkoutLive({
 
           {sets.length > 0 && (
             <div className="rounded-md border border-border bg-surface p-4">
-              <SetLast sets={sets} />
+              <SetLast sets={sets} exerciseId={exercise.id} />
             </div>
           )}
 
@@ -285,7 +285,7 @@ export function WorkoutLive({
             <button
               type="button"
               onClick={handleStart}
-              disabled={!granted || phase === "processing"}
+              disabled={!granted || phase !== "idle"}
               className="mt-1 flex w-full items-center justify-center gap-2 rounded-md bg-accent py-5 text-lg font-semibold text-white transition-colors duration-150 ease-out hover:bg-accent-hover disabled:opacity-50 [&_svg]:size-5"
             >
               {phase === "processing" ? (
@@ -328,13 +328,14 @@ export function WorkoutLive({
   );
 }
 
-// "0~7.1" → "0초~7초" (소수점 버림, 각 숫자에 초 붙임)
-function formatTimestamp(raw: string): string {
-  return raw.replace(/[\d.]+/g, (n) => `${Math.round(Number(n))}초`);
+// "0~7.1" → "0초~7초" or "0회~7회" (exercise_id=2이면 초, 그 외 회)
+function formatTimestamp(raw: string, exerciseId: number): string {
+  const unit = exerciseId === 2 ? "초" : "회";
+  return raw.replace(/[\d.]+/g, (n) => `${Math.round(Number(n))}${unit}`);
 }
 
 /* 가장 최근 세트 1건 — 와이어프레임 plank_fullscreen_redesign.html 기준 */
-function SetLast({ sets, className }: { sets: SetResult[]; className?: string }) {
+function SetLast({ sets, exerciseId, className }: { sets: SetResult[]; exerciseId: number; className?: string }) {
   const [expanded, setExpanded] = useState(false);
 
   const last = sets[sets.length - 1];
@@ -409,7 +410,7 @@ function SetLast({ sets, className }: { sets: SetResult[]; className?: string })
               )}
               <div>
                 {/* seg.timestamp: 구간 시각 레이블. 백엔드 확정 전 임시 필드명 */}
-                <p className="text-xs font-medium">{formatTimestamp(seg.timestamp)}</p>
+                <p className="text-xs font-medium">{formatTimestamp(seg.timestamp, exerciseId)}</p>
                 {/* seg.comment: 구간 설명 텍스트. 백엔드 확정 전 임시 필드명 */}
                 <p className="text-xs text-text-subtle">{seg.comment}</p>
               </div>
