@@ -173,7 +173,17 @@ export function WorkoutLive({
           </span>
         </header>
 
-        <Card className="mt-8 border-accent/40">
+        {summary.avgScore != null && (
+          <div className="mt-6 flex items-center justify-between rounded-xl bg-surface-muted px-5 py-4">
+            <span className="text-sm text-text-muted">평균 점수</span>
+            <span className="text-2xl font-bold tabular-nums">
+              {summary.avgScore.toFixed(1)}
+              <span className="ml-1 text-sm font-normal text-text-muted">점</span>
+            </span>
+          </div>
+        )}
+
+        <Card className="mt-4 border-accent/40">
           <CardHeader className="flex items-center gap-2">
             <Sparkles className="size-4 text-accent" aria-hidden />
             <h2 className="text-sm font-semibold">AI 종합 피드백</h2>

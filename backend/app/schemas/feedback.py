@@ -41,10 +41,11 @@ class ExerciseFeedbackSummaryRequest(CamelModel):
 
 
 # ExerciseFeedbackSummaryResponse: 여러 세트 피드백을 LLM 이 합쳐 만든 운동 종합 피드백 1건.
-#   DB 에 저장하지 않으므로 id 가 없다(저장하려면 ERD 변경 필요 → 의도적으로 미저장).
+#   마지막 session_id 에 묶어 feedbacks 테이블에 저장한다.
 class ExerciseFeedbackSummaryResponse(CamelModel):
     exercise_id: int                 # 어떤 종목에 대한 종합인지.
     set_count: int                   # 종합에 사용된 세트(피드백) 개수.
     generated_by: FeedbackSource     # 항상 llm.
     content: str                     # 운동 전체 코칭 코멘트.
-    created_at: datetime             # 생성 시각(응답 시점). 저장하지 않으므로 표시용.
+    avg_score: float | None          # 세트별 점수의 평균(0~100). 점수 없으면 None. JSON: avgScore
+    created_at: datetime             # DB 저장 시각.

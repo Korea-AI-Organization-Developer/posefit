@@ -80,5 +80,17 @@ class WorkoutSessionRepository:
         result = await self.db.execute(q)
         return list(result.scalars().all())
 
+    async def get_scores_by_ids(self, session_ids: list[int]) -> dict[int, float | None]:
+        if not session_ids:
+            return {}
+        result = await self.db.execute(
+            select(WorkoutSession.id, WorkoutSession.score)
+            .where(WorkoutSession.id.in_(session_ids))
+        )
+        return {
+            row[0]: float(row[1]) if row[1] is not None else None
+            for row in result.all()
+        }
+
     async def delete(self, session: WorkoutSession) -> None:
         await self.db.delete(session)
