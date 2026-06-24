@@ -1,6 +1,6 @@
 # func: SQL의 집계 함수(avg, count 등)를 파이썬에서 부르는 도구. 여기선 func.avg(평균)를 쓴다.
 # select: "SELECT ... FROM ..." 조회문을 파이썬 코드로 만드는 도구.
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 
 # AsyncSession: 데이터베이스와의 "비동기 연결(세션)" 타입. 이걸로 쿼리를 실행한다.
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,7 +44,16 @@ class ExerciseRepository:
         if active_only:
             stmt = stmt.where(Exercise.is_active.is_(True))   # WHERE is_active = TRUE
 
-        # ── ③ 실행: 위에서 조립한 조회문을 DB에 보내 결과를 받는다 ────────────────
+        # ── ③ 정렬: 플랭크 → 런지 → 나머지(id 순) ──────────────────────────────
+        stmt = stmt.order_by(
+            case(
+                (Exercise.name_en == "Plank", 1),
+                (Exercise.name_en == "Lunge", 2),
+                else_=Exercise.id + 10,
+            )
+        )
+
+        # ── ④ 실행: 위에서 조립한 조회문을 DB에 보내 결과를 받는다 ────────────────
         result = await self.db.execute(stmt)   # await: DB가 답할 때까지 기다림(그동안 다른 요청 처리 가능).
         return result.all()                    # (Exercise 객체, 평균점수) 쌍들의 목록을 그대로 반환.
 

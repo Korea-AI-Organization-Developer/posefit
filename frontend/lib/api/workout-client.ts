@@ -13,12 +13,13 @@ export interface StopSetResponse {
   feedback: Feedback; // 그 세트의 LLM 피드백.
 }
 
-// ExerciseFeedbackSummary: POST /exercises/{id}/feedbacks:summary 응답(미저장 종합 피드백).
+// ExerciseFeedbackSummary: POST /exercises/{id}/feedbacks:summary 응답(종합 피드백).
 export interface ExerciseFeedbackSummary {
   exerciseId: number;
   setCount: number; // 종합에 사용된 세트 수.
   generatedBy: "llm";
   content: string; // 운동 전체 종합 코멘트.
+  avgScore: number | null; // 세트별 점수 평균(0~100). 점수 없으면 null.
   createdAt: string;
 }
 
