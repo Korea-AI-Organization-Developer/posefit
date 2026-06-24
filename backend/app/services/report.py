@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 # LangGraph 종합 평가 최대 대기(초). 초과 시 규칙 기반으로 폴백한다.
 # thinking_budget=0 적용으로 응답이 3~5초 수준 → 여유 있게 25초.
 # (더 빠른 응답이 필요하면 GEMINI_MODEL 을 gemini-2.5-flash-lite 로 변경: ~3초)
-_AI_EVALUATION_TIMEOUT_SEC = 25
+_AI_EVALUATION_TIMEOUT_SEC = 60
 
 # 칼로리 계산용 운동별 MET (kcal = MET × 체중kg × 시간h).
 # workout_calendar.html 의 per-rep 계수를 MET 로 환산한 값.
