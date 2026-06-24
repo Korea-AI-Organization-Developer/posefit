@@ -294,7 +294,9 @@ class MediaPipePoseEstimator:
         vid_out_path   = video_out_dir / "annotated.mp4" if self.save_video else None
 
         cap         = cv2.VideoCapture(str(self.video_path))
-        src_fps     = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        src_fps_raw = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        # 브라우저 WebRTC(WebM)는 1ms 타임베이스로 OpenCV가 fps=1000으로 잘못 읽음 → 30fps로 보정
+        src_fps     = 30.0 if src_fps_raw > 120 else src_fps_raw
         width       = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height      = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total       = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -358,7 +360,8 @@ class MediaPipePoseEstimator:
                     src_frame_id += 1
                     continue
 
-                timestamp_ms = int(src_frame_id * 1000 / src_fps)
+                # out_frame_id 기반 고정 간격 — 단조증가 절대 보장
+                timestamp_ms = int(out_frame_id * 1000.0 / out_fps)
 
                 mp_image = mp.Image(
                     image_format=mp.ImageFormat.SRGB,

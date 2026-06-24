@@ -105,8 +105,7 @@ class WorkoutSessionService:
     ) -> StopSessionResponse:
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-        ext = Path(video.filename or "video.mp4").suffix or ".mp4"
-        filename = f"{uuid.uuid4()}{ext}"
+        filename = f"{user_id}_{exercise_id}.mp4"
         file_path = UPLOAD_DIR / filename
 
         content = await video.read()
