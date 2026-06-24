@@ -93,8 +93,8 @@ export function OverviewDialog() {
 
   return (
     <>
-      <Button variant="secondary" size="sm" onClick={handleOpen}>
-        전체 보기
+      <Button variant="primary" size="md" onClick={handleOpen}>
+        종합 리포트 평가
       </Button>
 
       <Dialog
@@ -158,7 +158,7 @@ export function OverviewDialog() {
             {data.evaluation && (
               <section>
                 <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-muted">
-                  종합 평가
+                  종합 리포트 평가
                   {data.evaluation.source === "ai" && (
                     <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
                       AI
